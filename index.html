@@ -1138,6 +1138,27 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     <div id="medalList"></div>
     <div id="medalEmpty" class="empty-hint" style="display:none;">No medals recorded.</div>
     <button class="add-btn" id="btnAddMedal" type="button">＋ Add Medal</button>
+
+    <div class="nested-section" id="commsLogSection">
+      <button type="button" class="nested-toggle" id="commsLogToggle">
+        <span>📡 Comms Log Import (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="commsLogBody" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Comms Officer's exported log (JSON) to include it as its own section in the PDF report.</div>
+        <label class="add-btn" id="btnImportCommsLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
+          ⬆ Import Comms Log (JSON)
+          <input type="file" id="importCommsLogInput" accept="application/json,.json" style="display:none;">
+        </label>
+        <div id="commsLogSummary" style="display:none; margin-top:12px;">
+          <div class="card">
+            <div class="card-head"><span class="card-role">Comms Log Loaded</span>
+              <button type="button" class="del-x" id="btnRemoveCommsLog">✕</button></div>
+            <div id="commsLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -1358,7 +1379,8 @@ function defaultState(){
     log: [],
     outcome:'',
     promotions: [],
-    medals: []
+    medals: [],
+    commsLog: null
   };
 }
 
@@ -2306,6 +2328,96 @@ function initDebrief(){
     state.medals.push({id:newId(), crewMember:'', medal:'', reason:''});
     scheduleSave(); renderMedals();
   });
+
+  initCommsLog();
+}
+
+/* ================= COMMS LOG IMPORT ================= */
+function commsTimeToMinutes(t){
+  if(!t || typeof t !== 'string') return 0;
+  var parts = t.split(':');
+  var h = parseInt(parts[0],10); var m = parseInt(parts[1],10);
+  return (isNaN(h)?0:h)*60 + (isNaN(m)?0:m);
+}
+
+function buildCommsOverallLog(commsLog){
+  if(!commsLog || !Array.isArray(commsLog.ships)) return [];
+  var flat = [];
+  commsLog.ships.forEach(function(ship){
+    (ship.entries||[]).forEach(function(e){
+      flat.push({
+        time: (e && e.time) || '',
+        text: (e && e.text) || '',
+        ts: (e && typeof e.ts === 'number') ? e.ts : 0,
+        shipName: (ship && ship.name) || 'Unknown Ship'
+      });
+    });
+  });
+  flat.sort(function(a,b){
+    var am = commsTimeToMinutes(a.time), bm = commsTimeToMinutes(b.time);
+    if(am !== bm) return am - bm;
+    return a.ts - b.ts;
+  });
+  return flat;
+}
+
+function renderCommsLogSummary(){
+  var summaryWrap = document.getElementById('commsLogSummary');
+  var summaryText = document.getElementById('commsLogSummaryText');
+  if(!state.commsLog){
+    summaryWrap.style.display = 'none';
+    return;
+  }
+  var shipCount = (state.commsLog.ships||[]).length;
+  var entryCount = buildCommsOverallLog(state.commsLog).length;
+  var b = state.commsLog.briefing || {};
+  var parts = [];
+  if(b.missionName) parts.push('Mission: ' + b.missionName);
+  if(b.opName) parts.push('Comms Officer: ' + b.opName + (b.opRank ? ' (' + b.opRank + ')' : ''));
+  parts.push(shipCount + ' ship' + (shipCount===1?'':'s') + ', ' + entryCount + ' log entr' + (entryCount===1?'y':'ies'));
+  summaryText.innerHTML = parts.map(function(p){ return escHtml(p); }).join('<br>');
+  summaryWrap.style.display = '';
+}
+
+function initCommsLog(){
+  renderCommsLogSummary();
+
+  var toggle = document.getElementById('commsLogToggle');
+  var body = document.getElementById('commsLogBody');
+  toggle.addEventListener('click', function(){
+    var isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : '';
+    toggle.classList.toggle('open', !isOpen);
+  });
+
+  document.getElementById('importCommsLogInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var parsed = JSON.parse(reader.result);
+        if(!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.ships)){
+          throw new Error('Missing ships array');
+        }
+        state.commsLog = parsed;
+        scheduleSave();
+        renderCommsLogSummary();
+        toast('Comms log imported ✔');
+      }catch(err){
+        alert('Could not read that file — make sure it\'s a UCN Comms Log JSON export.');
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('btnRemoveCommsLog').addEventListener('click', function(){
+    if(!confirm('Remove the imported comms log? It will no longer appear in the PDF export.')) return;
+    state.commsLog = null;
+    scheduleSave();
+    renderCommsLogSummary();
+  });
 }
 
 /* ================= UTIL: ESCAPING ================= */
@@ -2367,6 +2479,7 @@ function renderAll(){
   renderPoi(); renderPeople(); renderLog();
   document.getElementById('outcomeText').value = state.outcome;
   renderPromotions(); renderMedals();
+  renderCommsLogSummary();
 }
 
 /* ================= DIRECT PDF EXPORT (jsPDF) ================= */
@@ -2823,6 +2936,27 @@ function pdfLogEntry(doc, timestamp, notes){
   pdfCursorY += boxH + 2.5;
 }
 
+function pdfCommsLogEntry(doc, timestamp, shipName, text){
+  doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(9.5);
+  var textX = PDF_MARGIN_L + 22;
+  var textW = PDF_CONTENT_W - 22;
+  var lines = doc.splitTextToSize(pdfText(text||'—'), textW-2);
+  var lineH = 4.4;
+  var boxH = Math.max(9, 5 + lines.length*lineH + 2);
+  pdfEnsureSpace(doc, boxH+2.5);
+  doc.setFillColor(PDF_NAVY[0],PDF_NAVY[1],PDF_NAVY[2]);
+  doc.roundedRect(PDF_MARGIN_L, pdfCursorY, 18, 7, 1.2, 1.2, 'F');
+  doc.setFont(pdfHeadingFont(),'bold'); doc.setFontSize(8.5); doc.setTextColor(255,255,255);
+  doc.text(pdfText(timestamp), PDF_MARGIN_L+9, pdfCursorY+4.8, {align:'center'});
+  doc.setFont(pdfBodyFont(),'bold'); doc.setFontSize(8);
+  doc.setTextColor(PDF_ORANGE[0],PDF_ORANGE[1],PDF_ORANGE[2]);
+  doc.text(pdfFitText(doc, (shipName||'—').toUpperCase(), textW), textX, pdfCursorY+4);
+  doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(9.5); doc.setTextColor(PDF_TEXT[0],PDF_TEXT[1],PDF_TEXT[2]);
+  var ly = pdfCursorY + 9;
+  lines.forEach(function(l){ doc.text(l, textX, ly); ly += lineH; });
+  pdfCursorY += boxH + 2.5;
+}
+
 function pdfCoverPage(doc, s, navyLogoDataUrl){
   pdfDrawFrame(doc);
   pdfCursorY = PDF_MARGIN_TOP;
@@ -2999,6 +3133,16 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     s.log.forEach(function(l){ pdfLogEntry(doc, l.timestamp, l.notes); });
   } else {
     pdfParagraph(doc, 'No timeline entries recorded.', {italic:true, color:PDF_MUTED});
+  }
+
+  if(s.commsLog && Array.isArray(s.commsLog.ships) && s.commsLog.ships.length){
+    var commsOverall = buildCommsOverallLog(s.commsLog);
+    pdfSectionStart(doc, 'Communications Log', tocEntries);
+    if(commsOverall.length){
+      commsOverall.forEach(function(e){ pdfCommsLogEntry(doc, e.time, e.shipName, e.text); });
+    } else {
+      pdfParagraph(doc, 'No communications entries recorded.', {italic:true, color:PDF_MUTED});
+    }
   }
 
   pdfSectionStart(doc, 'Mission Outcome', tocEntries);
