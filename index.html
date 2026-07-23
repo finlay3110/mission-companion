@@ -935,8 +935,104 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 
 <main>
 
-  <!-- TAB 1: CREW SETUP -->
-  <section class="tab-panel active" id="tab-crew">
+  <!-- TAB 1: BRIEFING NOTES -->
+  <section class="tab-panel active" id="tab-briefing">
+    <div class="section-title">Mission Briefing</div>
+    <div class="two-col">
+      <div class="field">
+        <label>Authorisation</label>
+        <select id="authorisationSelect">
+          <option value="">— Select —</option>
+          <option value="Diplomatic protocol">Diplomatic protocol</option>
+          <option value="Engage with discretion">Engage with discretion</option>
+          <option value="Seek and destroy">Seek and destroy</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Threat Level</label>
+        <select id="threatLevelSelect">
+          <option value="">— Select —</option>
+          <option value="Monitor (Green)">Monitor (Green)</option>
+          <option value="Alert (Orange)">Alert (Orange)</option>
+          <option value="Active (Red)">Active (Red)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <textarea id="briefingText" class="big-textarea" placeholder="Enter the mission briefing here…"></textarea>
+    </div>
+
+    <div class="nested-section" id="briefingFcSection">
+      <button type="button" class="nested-toggle" id="briefingFcToggle">
+        <span>🧑‍✈️ Flight Controller &amp; Training Officer (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="briefingFcBody" style="display:none;">
+        <div class="section-title" style="margin-top:14px;">Flight Controller</div>
+        <div class="card fc-card">
+          <div class="field autocomplete-wrap">
+            <label for="fcSearchBriefing">Character Search</label>
+            <input type="text" id="fcSearchBriefing" placeholder="Start typing a name…" autocomplete="off">
+            <div class="ac-list" id="fcListBriefing"></div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label for="fcRankBriefing">Rank</label>
+              <select id="fcRankBriefing"></select>
+            </div>
+            <div class="field">
+              <label for="fcPronounsBriefing">Pronouns</label>
+              <select id="fcPronounsBriefing"></select>
+              <input type="text" id="fcPronounsOtherBriefing" placeholder="Enter pronouns" style="margin-top:6px; display:none;">
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:22px;">Training Officer</div>
+        <div class="card fc-card">
+          <div class="field autocomplete-wrap">
+            <label for="toSearchBriefing">Character Search</label>
+            <input type="text" id="toSearchBriefing" placeholder="Start typing a name…" autocomplete="off">
+            <div class="ac-list" id="toListBriefing"></div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label for="toRankBriefing">Rank</label>
+              <select id="toRankBriefing"></select>
+            </div>
+            <div class="field">
+              <label for="toPronounsBriefing">Pronouns</label>
+              <select id="toPronounsBriefing"></select>
+              <input type="text" id="toPronounsOtherBriefing" placeholder="Enter pronouns" style="margin-top:6px; display:none;">
+            </div>
+          </div>
+        </div>
+        <div class="empty-hint" style="margin-top:10px;">Also editable on the Crew tab — it's the same assignment either way.</div>
+      </div>
+    </div>
+
+    <div class="nested-section" id="briefingPoiSection">
+      <button type="button" class="nested-toggle" id="briefingPoiToggle">
+        <span>📍 Points of Interest &amp; People (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="briefingPoiBody" style="display:none;">
+        <div class="section-title" style="margin-top:14px;">Points of Interest</div>
+        <div id="poiListBriefing"></div>
+        <div id="poiEmptyBriefing" class="empty-hint" style="display:none;">No points of interest logged yet.</div>
+        <button class="add-btn" id="btnAddPoiBriefing" type="button">＋ Add Point of Interest</button>
+
+        <div class="section-title" style="margin-top:22px;">People Met / Spoken To</div>
+        <div id="peopleListBriefing"></div>
+        <div id="peopleEmptyBriefing" class="empty-hint" style="display:none;">No contacts logged yet.</div>
+        <button class="add-btn" id="btnAddPersonBriefing" type="button">＋ Add Person</button>
+        <div class="empty-hint" style="margin-top:10px;">These also appear on the Notes tab — it's the same list either way.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: CREW SETUP -->
+  <section class="tab-panel" id="tab-crew">
 
     <div class="section-title">Flight Controller</div>
     <div class="section-sub">Search by the Flight Controller's name.</div>
@@ -1003,54 +1099,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 
   </section>
 
-  <!-- TAB 2: BRIEFING NOTES -->
-  <section class="tab-panel" id="tab-briefing">
-    <div class="section-title">Mission Briefing</div>
-    <div class="two-col">
-      <div class="field">
-        <label>Authorisation</label>
-        <select id="authorisationSelect">
-          <option value="">— Select —</option>
-          <option value="Diplomatic protocol">Diplomatic protocol</option>
-          <option value="Engage with discretion">Engage with discretion</option>
-          <option value="Seek and destroy">Seek and destroy</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Threat Level</label>
-        <select id="threatLevelSelect">
-          <option value="">— Select —</option>
-          <option value="Monitor (Green)">Monitor (Green)</option>
-          <option value="Alert (Orange)">Alert (Orange)</option>
-          <option value="Active (Red)">Active (Red)</option>
-        </select>
-      </div>
-    </div>
-    <div class="field">
-      <textarea id="briefingText" class="big-textarea" placeholder="Enter the mission briefing here…"></textarea>
-    </div>
-
-    <div class="nested-section" id="briefingPoiSection">
-      <button type="button" class="nested-toggle" id="briefingPoiToggle">
-        <span>📍 Points of Interest &amp; People (optional)</span>
-        <span class="nested-chevron">▾</span>
-      </button>
-      <div class="nested-body" id="briefingPoiBody" style="display:none;">
-        <div class="section-title" style="margin-top:14px;">Points of Interest</div>
-        <div id="poiListBriefing"></div>
-        <div id="poiEmptyBriefing" class="empty-hint" style="display:none;">No points of interest logged yet.</div>
-        <button class="add-btn" id="btnAddPoiBriefing" type="button">＋ Add Point of Interest</button>
-
-        <div class="section-title" style="margin-top:22px;">People Met / Spoken To</div>
-        <div id="peopleListBriefing"></div>
-        <div id="peopleEmptyBriefing" class="empty-hint" style="display:none;">No contacts logged yet.</div>
-        <button class="add-btn" id="btnAddPersonBriefing" type="button">＋ Add Person</button>
-        <div class="empty-hint" style="margin-top:10px;">These also appear on the Notes tab — it's the same list either way.</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 3: MISSION NOTES -->
+<!-- TAB 3: MISSION NOTES -->
   <section class="tab-panel" id="tab-notes">
 
     <div class="section-title">Points of Interest</div>
@@ -1094,8 +1143,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 </main>
 
 <nav class="bottom-nav">
-  <button class="nav-btn active" data-tab="tab-crew" type="button"><span class="nico">👥</span><span class="nlabel">Crew</span></button>
-  <button class="nav-btn" data-tab="tab-briefing" type="button"><span class="nico">📋</span><span class="nlabel">Briefing</span></button>
+  <button class="nav-btn active" data-tab="tab-briefing" type="button"><span class="nico">📋</span><span class="nlabel">Briefing</span></button>
+  <button class="nav-btn" data-tab="tab-crew" type="button"><span class="nico">👥</span><span class="nlabel">Crew</span></button>
   <button class="nav-btn" data-tab="tab-notes" type="button"><span class="nico">🗒️</span><span class="nlabel">Notes</span></button>
   <button class="nav-btn" data-tab="tab-log" type="button"><span class="nico">⏱️</span><span class="nlabel">Log</span></button>
   <button class="nav-btn" data-tab="tab-debrief" type="button"><span class="nico">🎖️</span><span class="nlabel">Debrief</span></button>
@@ -1187,7 +1236,7 @@ var LOGO_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA08AAANPCAYAAAACPu
 
 var RANKS = ['Cadet','Ensign','Sub Lt','Lieutenant','Lt Cmdr','Commander','Captain','Commodore','Rear Admiral','Vice Admiral','Admiral','Admiral of the Fleet'];
 
-var SHIP_ROLES = ['Captain','First Officer','Helm','Navigation','Comms','Chief Engineer','Manual Engineer','Radar','Dock and Drones','Beams','Missiles'];
+var SHIP_ROLES = ['Captain','First Officer','Helm','Navigation','Comms','Power Management','Damage Control','Radar','Drone Operator','Beams','Missiles'];
 
 var SHUTTLE_ROLES = ['Shuttle Helm','Shuttle Generalist','Shuttle Engineer'];
 
@@ -1579,7 +1628,7 @@ function syncPronounControls(selectEl, otherEl, value){
   }
 }
 
-function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronounsOtherId, stateKey){
+function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronounsOtherId, stateKey, mirror){
   var searchEl = document.getElementById(searchId);
   var listEl = document.getElementById(listId);
   var rankEl = document.getElementById(rankId);
@@ -1593,10 +1642,28 @@ function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronoun
   rankEl.value = state[stateKey].rank || '';
   syncPronounControls(pronounsSelectEl, pronounsOtherEl, state[stateKey].pronouns || '');
 
+  function mirrorSearch(val){
+    if(!mirror || !mirror.searchId) return;
+    var m = document.getElementById(mirror.searchId);
+    if(m) m.value = val;
+  }
+  function mirrorRank(val){
+    if(!mirror || !mirror.rankId) return;
+    var m = document.getElementById(mirror.rankId);
+    if(m) m.value = val;
+  }
+  function mirrorPronouns(){
+    if(!mirror || !mirror.pronounsSelectId || !mirror.pronounsOtherId) return;
+    var ms = document.getElementById(mirror.pronounsSelectId);
+    var mo = document.getElementById(mirror.pronounsOtherId);
+    if(ms && mo) syncPronounControls(ms, mo, state[stateKey].pronouns || '');
+  }
+
   searchEl.addEventListener('input', function(){
     var q = searchEl.value.trim().toLowerCase();
     state[stateKey].character = searchEl.value;
     scheduleSave();
+    mirrorSearch(searchEl.value);
     if(!q){ listEl.classList.remove('show'); listEl.innerHTML=''; return; }
     var matches = BC_CAST.filter(function(c){
       return c.performer.toLowerCase().indexOf(q)!==-1 || c.character.toLowerCase().indexOf(q)!==-1;
@@ -1619,13 +1686,14 @@ function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronoun
     state[stateKey].character = searchEl.value;
     listEl.classList.remove('show'); listEl.innerHTML='';
     scheduleSave();
+    mirrorSearch(searchEl.value);
   });
 
   document.addEventListener('click', function(e){
     if(!e.target.closest('.autocomplete-wrap')) { listEl.classList.remove('show'); }
   });
 
-  rankEl.addEventListener('change', function(){ state[stateKey].rank = rankEl.value; scheduleSave(); });
+  rankEl.addEventListener('change', function(){ state[stateKey].rank = rankEl.value; scheduleSave(); mirrorRank(rankEl.value); });
 
   pronounsSelectEl.addEventListener('change', function(){
     if(pronounsSelectEl.value === 'other'){
@@ -1639,16 +1707,24 @@ function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronoun
       pronounsOtherEl.value = '';
     }
     scheduleSave();
+    mirrorPronouns();
   });
   pronounsOtherEl.addEventListener('input', function(){
     state[stateKey].pronouns = pronounsOtherEl.value;
     scheduleSave();
+    mirrorPronouns();
   });
 }
 
 function initFlightCommander(){
-  initCastSearchField('fcSearch','fcList','fcRank','fcPronouns','fcPronounsOther','flightController');
-  initCastSearchField('toSearch','toList','toRank','toPronouns','toPronounsOther','trainingOfficer');
+  initCastSearchField('fcSearch','fcList','fcRank','fcPronouns','fcPronounsOther','flightController',
+    {searchId:'fcSearchBriefing', rankId:'fcRankBriefing', pronounsSelectId:'fcPronounsBriefing', pronounsOtherId:'fcPronounsOtherBriefing'});
+  initCastSearchField('toSearch','toList','toRank','toPronouns','toPronounsOther','trainingOfficer',
+    {searchId:'toSearchBriefing', rankId:'toRankBriefing', pronounsSelectId:'toPronounsBriefing', pronounsOtherId:'toPronounsOtherBriefing'});
+  initCastSearchField('fcSearchBriefing','fcListBriefing','fcRankBriefing','fcPronounsBriefing','fcPronounsOtherBriefing','flightController',
+    {searchId:'fcSearch', rankId:'fcRank', pronounsSelectId:'fcPronouns', pronounsOtherId:'fcPronounsOther'});
+  initCastSearchField('toSearchBriefing','toListBriefing','toRankBriefing','toPronounsBriefing','toPronounsOtherBriefing','trainingOfficer',
+    {searchId:'toSearch', rankId:'toRank', pronounsSelectId:'toPronouns', pronounsOtherId:'toPronounsOther'});
 }
 
 /* ================= GENERIC CREW LIST (ship / shuttle) ================= */
@@ -1939,6 +2015,14 @@ function initBriefing(){
     var isOpen = body.style.display !== 'none';
     body.style.display = isOpen ? 'none' : '';
     toggle.classList.toggle('open', !isOpen);
+  });
+
+  var fcToggle = document.getElementById('briefingFcToggle');
+  var fcBody = document.getElementById('briefingFcBody');
+  fcToggle.addEventListener('click', function(){
+    var isOpen = fcBody.style.display !== 'none';
+    fcBody.style.display = isOpen ? 'none' : '';
+    fcToggle.classList.toggle('open', !isOpen);
   });
 }
 
@@ -2252,6 +2336,12 @@ function renderAll(){
   document.getElementById('toSearch').value = state.trainingOfficer.character || '';
   document.getElementById('toRank').value = state.trainingOfficer.rank || '';
   syncPronounControls(document.getElementById('toPronouns'), document.getElementById('toPronounsOther'), state.trainingOfficer.pronouns || '');
+  document.getElementById('fcSearchBriefing').value = state.flightController.character || '';
+  document.getElementById('fcRankBriefing').value = state.flightController.rank || '';
+  syncPronounControls(document.getElementById('fcPronounsBriefing'), document.getElementById('fcPronounsOtherBriefing'), state.flightController.pronouns || '');
+  document.getElementById('toSearchBriefing').value = state.trainingOfficer.character || '';
+  document.getElementById('toRankBriefing').value = state.trainingOfficer.rank || '';
+  syncPronounControls(document.getElementById('toPronounsBriefing'), document.getElementById('toPronounsOtherBriefing'), state.trainingOfficer.pronouns || '');
   renderShipCrew();
   document.getElementById('shuttleToggle').checked = !!state.shuttleEnabled;
   document.getElementById('shuttleSection').style.display = state.shuttleEnabled ? 'block' : 'none';
@@ -2740,6 +2830,12 @@ function pdfCoverPage(doc, s, navyLogoDataUrl){
     ['TIME', s.opTime||'—'],
     ['FILED BY', s.filedBy||'—']
   ];
+  if(s.authorisation){
+    rows.push(['AUTHORISATION', s.authorisation]);
+  }
+  if(s.threatLevel){
+    rows.push(['THREAT LEVEL', s.threatLevel]);
+  }
   if(s.campaignGroup){
     rows.push(['GROUP', s.campaignGroup]);
   }
@@ -2817,7 +2913,9 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
 
   pdfSectionStart(doc, 'Crew Details', tocEntries);
   pdfCastBlock(doc, 'Flight Controller', s.flightController);
-  pdfCastBlock(doc, 'Training Officer', s.trainingOfficer);
+  if(s.trainingOfficer && s.trainingOfficer.character && s.trainingOfficer.character.trim()){
+    pdfCastBlock(doc, 'Training Officer', s.trainingOfficer);
+  }
   pdfTable(doc, ['Role','Player Name','Callsign','Rank','Pronouns'],
     s.shipCrew.map(function(c){ return [c.role, c.name||'—', c.callsign||'—', c.rank||'—', c.pronouns||'—']; }),
     [30, 46, 32, 28, PDF_CONTENT_W-30-46-32-28]);
