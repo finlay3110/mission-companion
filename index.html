@@ -1362,7 +1362,22 @@ function defaultState(){
   };
 }
 
+var ROLE_RENAME_MAP = {
+  'Chief Engineer': 'Power Management',
+  'Manual Engineer': 'Damage Control',
+  'Dock and Drones': 'Drone Operator'
+};
+
 var state = loadState();
+
+function migrateRoleNames(s){
+  if(s && s.shipCrew){
+    s.shipCrew.forEach(function(c){
+      if(c && ROLE_RENAME_MAP.hasOwnProperty(c.role)) c.role = ROLE_RENAME_MAP[c.role];
+    });
+  }
+  return s;
+}
 
 function loadState(){
   try{
@@ -1371,7 +1386,7 @@ function loadState(){
     var parsed = JSON.parse(raw);
     var d = defaultState();
     for(var k in d){ if(parsed.hasOwnProperty(k)) d[k] = parsed[k]; }
-    return d;
+    return migrateRoleNames(d);
   }catch(e){ return defaultState(); }
 }
 
@@ -3225,7 +3240,7 @@ function initMissionJsonBackup(){
         var parsed = JSON.parse(reader.result);
         var fresh = defaultState();
         for(var k in fresh){ if(parsed.hasOwnProperty(k)) fresh[k] = parsed[k]; }
-        state = fresh;
+        state = migrateRoleNames(fresh);
         persist();
         renderAll();
         toast('Mission restored ✔');
