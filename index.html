@@ -239,7 +239,7 @@ main{
 }
 .field input, .field select, .field textarea{
   width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--border); color:var(--text);
-  border-radius:9px; padding:10px 10px; font-size:14px;
+  border-radius:9px; padding:10px 10px; font-size:14px; transition:border-color 0.2s ease, background-color 0.2s ease;
 }
 .field input:focus, .field select:focus, .field textarea:focus{
   outline:none; border-color:var(--orange); background:rgba(221,122,43,0.08);
@@ -271,6 +271,18 @@ main{
 }
 .add-btn-big .ico{font-size:22px;}
 .add-btn-big:active{background:#c66a1f; box-shadow:0 2px 6px rgba(221,122,43,0.3);}
+
+.quick-log-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;
+}
+.quick-log-btn{
+  background:var(--card); border:1px solid var(--border); color:var(--text);
+  border-radius:12px; padding:12px 8px; font-size:12.5px; font-weight:700; letter-spacing:0.01em;
+  display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center;
+}
+.quick-log-btn .ico{font-size:20px;}
+.quick-log-btn:active{background:var(--card-hi);}
+.quick-log-btn[style*="display:none"]{display:none !important;}
 
 .empty-hint{
   text-align:center; color:var(--muted); font-size:12px; padding:18px 8px; font-style:italic;
@@ -1117,6 +1129,12 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <!-- TAB 4: ONGOING LOG -->
   <section class="tab-panel" id="tab-log">
     <div class="section-title">Mission Timeline</div>
+    <div class="quick-log-grid">
+      <button class="quick-log-btn" id="btnQuickTraining" type="button"><span class="ico">🎓</span>Training</button>
+      <button class="quick-log-btn" id="btnQuickCombat" type="button"><span class="ico">⚔️</span>Combat</button>
+      <button class="quick-log-btn" id="btnQuickNuclear" type="button"><span class="ico">☢️</span>Nuclear Authorisation</button>
+      <button class="quick-log-btn" id="btnQuickMission" type="button"><span class="ico">🚀</span>Mission</button>
+    </div>
     <button class="add-btn-big" id="btnAddLog" type="button" style="margin-bottom:14px;"><span class="ico">⏱️</span>Add Log Entry</button>
     <div id="logList"></div>
     <div id="logEmpty" class="empty-hint" style="display:none;">No log entries yet. Tap "Add Log Entry" to timestamp an event.</div>
@@ -1242,6 +1260,23 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       <button type="button" class="more-menu-item" id="btnMoreCopySummary"><span class="ico">📋</span>Copy Summary</button>
       <button type="button" class="more-menu-item" id="btnMoreHelp"><span class="ico">❓</span>Help / Instructions</button>
       <a class="more-menu-item" href="https://toolportal.netlify.app" id="btnMoreToolPortal" style="text-decoration:none;"><span class="ico">🏠</span>Back to Tool Portal</a>
+    </div>
+  </div>
+</div>
+
+<div id="quickLogOverlay" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title" id="quickLogTitle">Quick Log</span>
+      <button type="button" class="modal-close" id="quickLogCloseBtn">✕</button>
+    </div>
+    <div class="more-menu-list" id="quickLogOptionsList"></div>
+    <div id="quickLogFreetextWrap" style="display:none; margin-top:12px;">
+      <div class="field">
+        <label id="quickLogFreetextLabel">Details</label>
+        <textarea id="quickLogFreetextInput" placeholder="Enter details…"></textarea>
+      </div>
+      <button class="hbtn" id="quickLogFreetextConfirm" type="button" style="background:var(--orange); color:#241100; width:100%; margin-top:10px;">Log Entry</button>
     </div>
   </div>
 </div>
@@ -1380,7 +1415,8 @@ function defaultState(){
     outcome:'',
     promotions: [],
     medals: [],
-    commsLog: null
+    commsLog: null,
+    trainingComplete: false
   };
 }
 
@@ -2033,6 +2069,24 @@ function initCrewSetup(){
 }
 
 /* ================= BRIEFING ================= */
+var THREAT_COLORS = {
+  'Monitor (Green)': {border:'#1F8A55', bg:'rgba(31,138,85,0.16)'},
+  'Alert (Orange)': {border:'#DD7A2B', bg:'rgba(221,122,43,0.16)'},
+  'Active (Red)': {border:'#B23A3A', bg:'rgba(178,58,58,0.18)'}
+};
+function updateThreatLevelStyle(){
+  var sel = document.getElementById('threatLevelSelect');
+  if(!sel) return;
+  var c = THREAT_COLORS[sel.value];
+  if(c){
+    sel.style.borderLeft = '4px solid ' + c.border;
+    sel.style.backgroundColor = c.bg;
+  } else {
+    sel.style.borderLeft = '';
+    sel.style.backgroundColor = '';
+  }
+}
+
 function initBriefing(){
   var el = document.getElementById('briefingText');
   el.value = state.briefing;
@@ -2044,7 +2098,12 @@ function initBriefing(){
 
   var threatSel = document.getElementById('threatLevelSelect');
   threatSel.value = state.threatLevel || '';
-  threatSel.addEventListener('change', function(){ state.threatLevel = threatSel.value; scheduleSave(); });
+  updateThreatLevelStyle();
+  threatSel.addEventListener('change', function(){
+    state.threatLevel = threatSel.value;
+    scheduleSave();
+    updateThreatLevelStyle();
+  });
 
   var toggle = document.getElementById('briefingPoiToggle');
   var body = document.getElementById('briefingPoiBody');
@@ -2192,6 +2251,124 @@ function initLog(){
     state.log.push({id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:''});
     scheduleSave(); renderLog();
   });
+  initQuickLog();
+}
+
+/* ================= QUICK LOG (Training / Combat / Nuclear Authorisation / Mission) ================= */
+var QUICK_LOG_CONFIGS = {
+  training: {
+    title: 'Training',
+    options: [
+      {label:'Training Started', text:'Training Started'},
+      {label:'Training Complete', text:'Training Complete', onSelect:function(){
+        state.trainingComplete = true;
+        scheduleSave();
+        updateQuickLogButtonsVisibility();
+      }}
+    ]
+  },
+  combat: {
+    title: 'Combat',
+    options: [
+      {label:'Code Yellow', text:'Code Yellow'},
+      {label:'Code Red', text:'Code Red'},
+      {label:'Combat Started', text:'Combat Started'},
+      {label:'Combat Finished', freetext:true, freetextLabel:'Combat outcome / summary (optional)', prefix:'Combat Finished'}
+    ]
+  },
+  nuclear: {
+    title: 'Nuclear Authorisation',
+    options: [
+      {label:'Nuclear Authorisation Requested', freetext:true, freetextLabel:'Target / reason (optional)', prefix:'Nuclear Authorisation Requested'},
+      {label:'Nuclear Authorisation Accepted', text:'Nuclear Authorisation Accepted'},
+      {label:'Nuclear Authorisation Declined', text:'Nuclear Authorisation Declined'}
+    ]
+  },
+  mission: {
+    title: 'Mission',
+    options: [
+      {label:'Main Mission Started', text:'Main Mission Started'},
+      {label:'Returning to Warspite', text:'Returning to Warspite'},
+      {label:'Mission Completed — End of Log', text:'Mission Completed — End of Log'}
+    ]
+  }
+};
+
+var currentQuickLogKey = null;
+var currentQuickLogOption = null;
+
+function logQuickEntry(text){
+  var n = new Date();
+  state.log.push({id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:text});
+  scheduleSave();
+  renderLog();
+  toast('Logged ✔');
+}
+
+function openQuickLogPopup(key){
+  currentQuickLogKey = key;
+  currentQuickLogOption = null;
+  var cfg = QUICK_LOG_CONFIGS[key];
+  document.getElementById('quickLogTitle').textContent = cfg.title;
+  document.getElementById('quickLogFreetextWrap').style.display = 'none';
+  var listEl = document.getElementById('quickLogOptionsList');
+  listEl.style.display = '';
+  listEl.innerHTML = cfg.options.map(function(opt, idx){
+    return '<button type="button" class="more-menu-item" data-idx="'+idx+'">'+escHtml(opt.label)+'</button>';
+  }).join('');
+  document.getElementById('quickLogOverlay').classList.add('show');
+}
+
+function closeQuickLogPopup(){
+  document.getElementById('quickLogOverlay').classList.remove('show');
+  currentQuickLogKey = null;
+  currentQuickLogOption = null;
+}
+
+function updateQuickLogButtonsVisibility(){
+  var trainBtn = document.getElementById('btnQuickTraining');
+  if(trainBtn) trainBtn.style.display = state.trainingComplete ? 'none' : '';
+}
+
+function initQuickLog(){
+  document.getElementById('quickLogOptionsList').addEventListener('click', function(e){
+    var btn = e.target.closest('.more-menu-item[data-idx]');
+    if(!btn) return;
+    var cfg = QUICK_LOG_CONFIGS[currentQuickLogKey];
+    var opt = cfg.options[parseInt(btn.getAttribute('data-idx'),10)];
+    if(!opt) return;
+    if(opt.freetext){
+      currentQuickLogOption = opt;
+      document.getElementById('quickLogFreetextLabel').textContent = opt.freetextLabel || 'Details';
+      document.getElementById('quickLogFreetextInput').value = '';
+      document.getElementById('quickLogOptionsList').style.display = 'none';
+      document.getElementById('quickLogFreetextWrap').style.display = '';
+      document.getElementById('quickLogFreetextInput').focus();
+    } else {
+      logQuickEntry(opt.text);
+      if(opt.onSelect) opt.onSelect();
+      closeQuickLogPopup();
+    }
+  });
+
+  document.getElementById('quickLogFreetextConfirm').addEventListener('click', function(){
+    var opt = currentQuickLogOption;
+    if(!opt) return;
+    var val = document.getElementById('quickLogFreetextInput').value.trim();
+    var text = opt.prefix + (val ? ': ' + val : '');
+    logQuickEntry(text);
+    if(opt.onSelect) opt.onSelect();
+    closeQuickLogPopup();
+  });
+
+  document.getElementById('quickLogCloseBtn').addEventListener('click', closeQuickLogPopup);
+
+  document.getElementById('btnQuickTraining').addEventListener('click', function(){ openQuickLogPopup('training'); });
+  document.getElementById('btnQuickCombat').addEventListener('click', function(){ openQuickLogPopup('combat'); });
+  document.getElementById('btnQuickNuclear').addEventListener('click', function(){ openQuickLogPopup('nuclear'); });
+  document.getElementById('btnQuickMission').addEventListener('click', function(){ openQuickLogPopup('mission'); });
+
+  updateQuickLogButtonsVisibility();
 }
 
 /* ================= DEBRIEF ================= */
@@ -2476,10 +2653,12 @@ function renderAll(){
   document.getElementById('briefingText').value = state.briefing;
   document.getElementById('authorisationSelect').value = state.authorisation || '';
   document.getElementById('threatLevelSelect').value = state.threatLevel || '';
+  updateThreatLevelStyle();
   renderPoi(); renderPeople(); renderLog();
   document.getElementById('outcomeText').value = state.outcome;
   renderPromotions(); renderMedals();
   renderCommsLogSummary();
+  updateQuickLogButtonsVisibility();
 }
 
 /* ================= DIRECT PDF EXPORT (jsPDF) ================= */
