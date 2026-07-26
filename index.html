@@ -277,6 +277,19 @@ main{
 .quick-log-grid{
   display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;
 }
+
+/* Quick Actions reuses the shared nested-section behaviour, but sits at the TOP of the Log
+   tab as a primary mid-mission control rather than an optional extra tucked at the bottom.
+   So: drop the divider/spacing the other nested sections use to separate themselves from
+   content above, and give the toggle card styling matching the .quick-log-btn language it
+   reveals — otherwise the muted .nested-toggle default reads as de-emphasised. */
+.nested-section.quick-actions{margin-top:0; border-top:none; padding-top:0; margin-bottom:12px;}
+.quick-actions .quick-log-grid{margin:8px 0 0;}
+.nested-toggle.toggle-card{
+  background:var(--card); border:1px solid var(--border); color:var(--text);
+  border-radius:12px; padding:14px; font-size:13.5px;
+}
+.nested-toggle.toggle-card:active{background:var(--card-hi);}
 .quick-log-btn{
   background:var(--card); border:1px solid var(--border); color:var(--text);
   border-radius:12px; padding:12px 8px; font-size:12.5px; font-weight:700; letter-spacing:0.01em;
@@ -1131,11 +1144,19 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <!-- TAB 4: ONGOING LOG -->
   <section class="tab-panel" id="tab-log">
     <div class="section-title">Mission Timeline</div>
-    <div class="quick-log-grid">
-      <button class="quick-log-btn" id="btnQuickTraining" type="button"><span class="ico">🎓</span>Training</button>
-      <button class="quick-log-btn" id="btnQuickCombat" type="button"><span class="ico">⚔️</span>Combat</button>
-      <button class="quick-log-btn" id="btnQuickNuclear" type="button"><span class="ico">☢️</span>Nuclear Authorisation</button>
-      <button class="quick-log-btn" id="btnQuickMission" type="button"><span class="ico">🚀</span>Mission</button>
+    <div class="nested-section quick-actions" id="quickActionsSection">
+      <button type="button" class="nested-toggle toggle-card" id="quickActionsToggle">
+        <span>⚡ Quick Actions</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="quickActionsBody" style="display:none;">
+        <div class="quick-log-grid">
+          <button class="quick-log-btn" id="btnQuickTraining" type="button"><span class="ico">🎓</span>Training</button>
+          <button class="quick-log-btn" id="btnQuickCombat" type="button"><span class="ico">⚔️</span>Combat</button>
+          <button class="quick-log-btn" id="btnQuickNuclear" type="button"><span class="ico">☢️</span>Nuclear Authorisation</button>
+          <button class="quick-log-btn" id="btnQuickMission" type="button"><span class="ico">🚀</span>Mission</button>
+        </div>
+      </div>
     </div>
     <button class="add-btn-big" id="btnAddLog" type="button" style="margin-bottom:14px;"><span class="ico">⏱️</span>Add Log Entry</button>
     <div id="logList"></div>
@@ -2364,6 +2385,20 @@ function initQuickLog(){
   });
 
   document.getElementById('quickLogCloseBtn').addEventListener('click', closeQuickLogPopup);
+
+  /* Collapse the quick-action grid behind a single toggle so the Log tab leads with the
+     timeline and the big "Add Log Entry" button. Same show/hide pattern as the nested
+     sections on the Briefing and Debrief tabs, and likewise not persisted to state — it
+     re-collapses on reload but stays open across tab switches within a session, since
+     switching tabs only toggles .tab-panel.active and leaves this display style alone.
+     Deliberately left open after logging an entry: consecutive quick logs are common. */
+  var qaToggle = document.getElementById('quickActionsToggle');
+  var qaBody = document.getElementById('quickActionsBody');
+  qaToggle.addEventListener('click', function(){
+    var isOpen = qaBody.style.display !== 'none';
+    qaBody.style.display = isOpen ? 'none' : '';
+    qaToggle.classList.toggle('open', !isOpen);
+  });
 
   document.getElementById('btnQuickTraining').addEventListener('click', function(){ openQuickLogPopup('training'); });
   document.getElementById('btnQuickCombat').addEventListener('click', function(){ openQuickLogPopup('combat'); });
