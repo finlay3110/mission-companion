@@ -50,6 +50,11 @@
 }
 
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+
+/* -webkit-tap-highlight-color:transparent above kills the touch flash (wanted), but with no
+   focus styling anywhere it also left keyboard focus completely invisible. :focus-visible only
+   fires for keyboard/AT navigation, so this costs touch users nothing. */
+:focus-visible{outline:2px solid var(--orange); outline-offset:2px; border-radius:4px;}
 html,body{margin:0;padding:0;height:100%;}
 body{
   background:radial-gradient(ellipse at top, #101a38 0%, var(--bg) 55%);
@@ -137,9 +142,17 @@ header.app-header{
 .last-saved-indicator{
   text-align:center; font-size:10px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:0.02em;
 }
+/* Save failure is unrecoverable data loss if ignored, so it gets full contrast and weight
+   rather than the muted styling of the normal "Saved Nm ago" state. */
+.last-saved-indicator.save-failed{
+  color:#ff9d9d; font-size:11px; font-weight:700; line-height:1.4;
+  background:rgba(178,58,58,0.22); border:1px solid var(--red); border-radius:8px; padding:7px 8px;
+}
+/* Lives in the More menu rather than the header — it's static legal text that never changes,
+   and in the header it permanently cost three lines of the primary viewport on every screen. */
 .header-disclaimer{
-  font-size:9px; line-height:1.4; color:rgba(255,255,255,0.4); text-align:center;
-  margin-top:8px; padding:0 4px;
+  font-size:10px; line-height:1.5; color:var(--muted); text-align:center;
+  margin-top:6px; padding:10px 6px 2px;
 }
 
 /* ============ MODALS (Roster + Intro) ============ */
@@ -188,8 +201,13 @@ header.app-header{
   letter-spacing:0.03em; text-transform:uppercase; display:flex; flex-direction:column; align-items:center; gap:2px;
 }
 .hbtn .ico{font-size:15px;}
-.hbtn-save{background:var(--orange); color:#2a1500;}
-.hbtn-export{background:var(--white); color:var(--navy);}
+/* Export PDF is the primary action, not Save: the app autosaves on every change
+   (scheduleSave, 300ms debounce), whereas exporting a PDF is the only way to get a permanent
+   copy off the device — which is exactly what the intro modal tells users they must do. Save
+   stays as an explicit "did that actually write?" check (it reports failures, see persist()),
+   so it's kept but de-emphasised. */
+.hbtn-save{background:rgba(255,255,255,0.12); color:#fff;}
+.hbtn-export{background:var(--orange); color:#2a1500;}
 .hbtn-new{background:rgba(178,58,58,0.25); color:#ffb3b3; border:1px solid var(--red);}
 
 /* ============ MAIN CONTENT ============ */
@@ -956,7 +974,6 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     <div class="header-actions" style="margin-top:6px;">
       <button class="hbtn" id="btnMore" type="button" style="background:rgba(255,255,255,0.12); color:#fff;"><span class="ico">⋯</span>More</button>
     </div>
-    <div class="header-disclaimer">The UCN logo is the property of Bridge Command / The London Space Elevator Limited. This is a fan-made project and is not approved by or affiliated with Bridge Command / The London Space Elevator Limited.</div>
   </div>
 </header>
 
@@ -990,7 +1007,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     </div>
 
     <div class="nested-section" id="briefingFcSection">
-      <button type="button" class="nested-toggle" id="briefingFcToggle">
+      <button type="button" class="nested-toggle" id="briefingFcToggle" aria-expanded="false" aria-controls="briefingFcBody">
         <span>🧑‍✈️ Flight Controller &amp; Training Officer (optional)</span>
         <span class="nested-chevron">▾</span>
       </button>
@@ -1039,7 +1056,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     </div>
 
     <div class="nested-section" id="briefingPoiSection">
-      <button type="button" class="nested-toggle" id="briefingPoiToggle">
+      <button type="button" class="nested-toggle" id="briefingPoiToggle" aria-expanded="false" aria-controls="briefingPoiBody">
         <span>📍 Points of Interest &amp; People (optional)</span>
         <span class="nested-chevron">▾</span>
       </button>
@@ -1145,7 +1162,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <section class="tab-panel" id="tab-log">
     <div class="section-title">Mission Timeline</div>
     <div class="nested-section quick-actions" id="quickActionsSection">
-      <button type="button" class="nested-toggle toggle-card" id="quickActionsToggle">
+      <button type="button" class="nested-toggle toggle-card" id="quickActionsToggle" aria-expanded="false" aria-controls="quickActionsBody">
         <span>⚡ Quick Actions</span>
         <span class="nested-chevron">▾</span>
       </button>
@@ -1181,7 +1198,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     <button class="add-btn" id="btnAddMedal" type="button">＋ Add Medal</button>
 
     <div class="nested-section" id="commsLogSection">
-      <button type="button" class="nested-toggle" id="commsLogToggle">
+      <button type="button" class="nested-toggle" id="commsLogToggle" aria-expanded="false" aria-controls="commsLogBody">
         <span>📡 Comms Log Import (optional)</span>
         <span class="nested-chevron">▾</span>
       </button>
@@ -1216,9 +1233,9 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 <div id="printRoot"></div>
 
 <div id="rosterOverlay" class="modal-overlay">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rosterModalTitle">
     <div class="modal-header">
-      <span class="modal-title">Player Roster</span>
+      <span class="modal-title" id="rosterModalTitle">Player Roster</span>
       <button type="button" class="modal-close" id="rosterCloseBtn">✕</button>
     </div>
     <div class="modal-sub">Players saved here can be reused across missions. Search-select them in Crew Setup instead of retyping names each time.</div>
@@ -1236,9 +1253,9 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 </div>
 
 <div id="introOverlay" class="modal-overlay">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="introModalTitle">
     <div class="modal-header">
-      <span class="modal-title">Welcome, Officer</span>
+      <span class="modal-title" id="introModalTitle">Welcome, Officer</span>
     </div>
     <div class="modal-body-text">
       <p><b>Everything you enter is stored only on this device</b>, in this browser. Nothing is uploaded, synced, or backed up anywhere.</p>
@@ -1252,9 +1269,9 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 </div>
 
 <div id="exportOptionsOverlay" class="modal-overlay">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
     <div class="modal-header">
-      <span class="modal-title">Export PDF</span>
+      <span class="modal-title" id="exportModalTitle">Export PDF</span>
     </div>
     <div class="modal-body-text">
       <p>Include the Report Certification page (Captain's signature block) in this export?</p>
@@ -1268,9 +1285,9 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 </div>
 
 <div id="moreOverlay" class="modal-overlay">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="moreModalTitle">
     <div class="modal-header">
-      <span class="modal-title">More</span>
+      <span class="modal-title" id="moreModalTitle">More</span>
       <button type="button" class="modal-close" id="moreCloseBtn">✕</button>
     </div>
     <div class="more-menu-list">
@@ -1284,11 +1301,12 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       <button type="button" class="more-menu-item" id="btnMoreHelp"><span class="ico">❓</span>Help / Instructions</button>
       <a class="more-menu-item" href="https://toolportal.netlify.app" id="btnMoreToolPortal" style="text-decoration:none;"><span class="ico">🏠</span>Back to Tool Portal</a>
     </div>
+    <div class="header-disclaimer">The UCN logo is the property of Bridge Command / The London Space Elevator Limited. This is a fan-made project and is not approved by or affiliated with Bridge Command / The London Space Elevator Limited.</div>
   </div>
 </div>
 
 <div id="quickLogOverlay" class="modal-overlay">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="quickLogTitle">
     <div class="modal-header">
       <span class="modal-title" id="quickLogTitle">Quick Log</span>
       <button type="button" class="modal-close" id="quickLogCloseBtn">✕</button>
@@ -1477,17 +1495,40 @@ function scheduleSave(){
   saveTimer = setTimeout(function(){ persist(); }, 300);
 }
 var lastSavedAt = null;
+var saveFailed = false;
+
+/* Returns true if the write actually landed. This used to swallow every error in an empty
+   catch, which meant a full-storage failure was invisible: lastSavedAt simply stopped
+   advancing, so the indicator kept counting up from the last SUCCESSFUL save ("Saved 14m ago")
+   and read as merely idle while the mission was silently not being saved at all. Everything
+   lives in one localStorage key, so exceeding quota loses the whole mission, not just the
+   newest edit — it has to be loud. */
 function persist(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     lastSavedAt = Date.now();
+    saveFailed = false;
     updateLastSavedDisplay();
-  }catch(e){}
+    return true;
+  }catch(e){
+    console.error('UCN Mission Companion: could not save to localStorage.', e);
+    saveFailed = true;
+    updateLastSavedDisplay();
+    return false;
+  }
 }
 
 function updateLastSavedDisplay(){
   var el = document.getElementById('lastSavedIndicator');
   if(!el) return;
+  /* Checked before anything else: while saving is broken this must not show a reassuring
+     "Saved Nm ago" from the last write that happened to succeed. */
+  if(saveFailed){
+    el.textContent = '⚠️ NOT SAVED — storage full. Export a PDF or JSON backup now.';
+    el.classList.add('save-failed');
+    return;
+  }
+  el.classList.remove('save-failed');
   if(!lastSavedAt){ el.textContent = 'Not saved yet'; return; }
   var diffSec = Math.round((Date.now()-lastSavedAt)/1000);
   var label;
@@ -1502,6 +1543,15 @@ function updateLastSavedDisplay(){
 /* Stored separately from mission state (its own localStorage key) since a roster of regular
    players is reused across many missions, not tied to any one mission. */
 var ROSTER_STORAGE_KEY = 'ucnPlayerRoster_v1';
+
+/* UI preference, deliberately not part of mission state — see the note in initHeader(). */
+var HEADER_COLLAPSED_KEY = 'ucnHeaderCollapsed_v1';
+function loadHeaderCollapsed(){
+  try{ return localStorage.getItem(HEADER_COLLAPSED_KEY) === '1'; }catch(e){ return false; }
+}
+function persistHeaderCollapsed(collapsed){
+  try{ localStorage.setItem(HEADER_COLLAPSED_KEY, collapsed ? '1' : '0'); }catch(e){}
+}
 
 function loadRoster(){
   try{
@@ -1526,10 +1576,110 @@ function toast(msg){
   toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
 }
 
+/* Flush pending edits immediately when the app is backgrounded or closed. scheduleSave() waits
+   300ms, and iOS can freeze or kill a backgrounded PWA well inside that window — losing the
+   last thing typed. pagehide covers navigation/close; visibilitychange covers the app switcher,
+   which is the common case on a phone mid-mission. Both are safe to call redundantly. */
+function initSaveFlush(){
+  window.addEventListener('pagehide', function(){ persist(); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden') persist();
+  });
+}
+
+/* ================= MODAL OVERLAYS ================= */
+/* Overlays used to be shown and hidden with bare classList toggles at a dozen call sites, so
+   there was no focus handling, no Escape and no backdrop dismissal anywhere in the app. These
+   helpers centralise that. Note 'show' is also used by the toast above and by the .ac-list
+   autocompletes, so the global handlers at the bottom are scoped to .modal-overlay only. */
+var modalReturnFocus = {};
+
+function openModal(id){
+  var overlay = document.getElementById(id);
+  if(!overlay) return;
+  modalReturnFocus[id] = document.activeElement;
+  overlay.classList.add('show');
+  var card = overlay.querySelector('.modal-card');
+  if(card){
+    /* Focus the card itself rather than its first control: these are bottom sheets and
+       focusing an input would pop the on-screen keyboard over the content being read. */
+    if(!card.hasAttribute('tabindex')) card.setAttribute('tabindex','-1');
+    card.focus();
+  }
+}
+
+function closeModal(id){
+  var overlay = document.getElementById(id);
+  if(!overlay) return;
+  overlay.classList.remove('show');
+  var back = modalReturnFocus[id];
+  modalReturnFocus[id] = null;
+  /* document.contains guards against restoring focus to a node a re-render has replaced. */
+  if(back && back.focus && document.contains(back)) back.focus();
+}
+
+/* Routes Escape/backdrop dismissal through each overlay's real close path, since some do extra
+   teardown. #introOverlay is deliberately excluded — it carries the "everything is stored only
+   on this device" warning and has no close button, so it must be acknowledged, not dismissed. */
+function dismissModal(overlay){
+  if(!overlay) return;
+  var id = overlay.id;
+  if(id === 'introOverlay') return;
+  if(id === 'quickLogOverlay'){ closeQuickLogPopup(); return; }
+  closeModal(id);
+}
+
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Escape') return;
+  var open = document.querySelectorAll('.modal-overlay.show');
+  if(open.length) dismissModal(open[open.length-1]);
+});
+
+document.addEventListener('click', function(e){
+  /* Only a click on the overlay itself is a backdrop click; clicks on the card bubble up here
+     too, but with e.target inside .modal-card. */
+  if(!e.target.classList || !e.target.classList.contains('modal-overlay')) return;
+  dismissModal(e.target);
+});
+
 /* ================= HEADER ================= */
 var opName = document.getElementById('opName');
 var opDate = document.getElementById('opDate');
 var opTime = document.getElementById('opTime');
+
+/* Reads an image file and hands back a downscaled data URL (never upscaled), or null if the
+   file can't be decoded. Calls back asynchronously in every path. */
+function downscaleImage(file, maxDim, cb){
+  var reader = new FileReader();
+  reader.onerror = function(){ cb(null); };
+  reader.onload = function(){
+    var img = new Image();
+    img.onerror = function(){ cb(null); };
+    img.onload = function(){
+      var w = img.naturalWidth || img.width;
+      var h = img.naturalHeight || img.height;
+      if(!w || !h){ cb(null); return; }
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w*scale));
+      var ch = Math.max(1, Math.round(h*scale));
+      try{
+        var canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
+        /* Keep PNG for formats that can carry transparency — group logos usually do, and a
+           JPEG re-encode would fill the transparent areas with black on the PDF cover.
+           Anything else is a photo, which compresses far better as JPEG. */
+        var keepAlpha = /png|gif|webp|svg/i.test(file.type || '');
+        cb(keepAlpha ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85));
+      }catch(e){
+        console.error('UCN Mission Companion: could not downscale image.', e);
+        cb(null);
+      }
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 function initHeader(){
   opName.value = state.opName; opDate.value = state.opDate; opTime.value = state.opTime;
@@ -1640,16 +1790,19 @@ function initHeader(){
   campaignLogoInput.addEventListener('change', function(){
     var file = campaignLogoInput.files && campaignLogoInput.files[0];
     if(!file) return;
-    if(file.size > 2*1024*1024){
-      toast('That image is quite large — a smaller logo will work better ⚠️');
-    }
-    var reader = new FileReader();
-    reader.onload = function(){
-      state.campaignLogoDataUrl = reader.result;
+    /* Always downscale before storing. The data URL goes into the same localStorage key as the
+       rest of the mission, base64 inflates it by ~33%, and the quota is around 5 MB — so a
+       phone photo picked as a group logo could push the ENTIRE mission save over the limit.
+       512px is well beyond what's needed: pdfCoverPage draws this at roughly 24mm. */
+    downscaleImage(file, 512, function(dataUrl){
+      if(!dataUrl){
+        toast('Could not read that image — try a different file ⚠️');
+        return;
+      }
+      state.campaignLogoDataUrl = dataUrl;
       syncCampaignLogoPreview();
       scheduleSave();
-    };
-    reader.readAsDataURL(file);
+    });
   });
   campaignLogoRemove.addEventListener('click', function(){
     state.campaignLogoDataUrl = null;
@@ -1665,15 +1818,32 @@ function initHeader(){
     var n2=new Date(); opTime.value = pad2(n2.getHours())+':'+pad2(n2.getMinutes()); state.opTime = opTime.value;
   }
 
-  document.getElementById('headerToggle').addEventListener('click', function(){
-    var body = document.getElementById('headerBody');
-    var collapsed = body.classList.toggle('collapsed');
+  /* Restore the collapse choice before wiring the toggle. The header holds mission metadata you
+     set once at the start, but it sat expanded over every tab for the whole mission, so
+     remembering "collapsed" is worth a lot of screen space. Kept in its own localStorage key
+     rather than in mission state (same reasoning as the player roster) so that starting a New
+     Mission doesn't reset what is really a UI preference. Defaults to expanded on first run. */
+  var headerBodyEl = document.getElementById('headerBody');
+  var headerToggleEl = document.getElementById('headerToggle');
+  var startCollapsed = loadHeaderCollapsed();
+  headerBodyEl.classList.toggle('collapsed', startCollapsed);
+  headerToggleEl.textContent = startCollapsed ? 'Show' : 'Hide';
+  headerToggleEl.setAttribute('aria-expanded', startCollapsed ? 'false' : 'true');
+  headerToggleEl.setAttribute('aria-controls', 'headerBody');
+
+  headerToggleEl.addEventListener('click', function(){
+    var collapsed = headerBodyEl.classList.toggle('collapsed');
     this.textContent = collapsed ? 'Show' : 'Hide';
+    this.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    persistHeaderCollapsed(collapsed);
     syncHeaderHeight();
   });
 
   document.getElementById('btnSave').addEventListener('click', function(){
-    persist(); toast('Mission saved ✔');
+    /* persist() reports success now, so this button is a genuine "did that write?" check
+       rather than decoration — it must not claim success when the write failed. */
+    if(persist()) toast('Mission saved ✔');
+    else toast('Save failed — device storage is full ⚠️');
   });
   document.getElementById('btnExport').addEventListener('click', exportPdf);
   document.getElementById('btnNew').addEventListener('click', newMission);
@@ -2134,6 +2304,7 @@ function initBriefing(){
     var isOpen = body.style.display !== 'none';
     body.style.display = isOpen ? 'none' : '';
     toggle.classList.toggle('open', !isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 
   var fcToggle = document.getElementById('briefingFcToggle');
@@ -2142,6 +2313,7 @@ function initBriefing(){
     var isOpen = fcBody.style.display !== 'none';
     fcBody.style.display = isOpen ? 'none' : '';
     fcToggle.classList.toggle('open', !isOpen);
+    fcToggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 }
 
@@ -2266,13 +2438,31 @@ function renderLog(){
   }).join('');
 }
 
+/* Brings a just-added log entry into view and puts the cursor in it. renderLog() rebuilds the
+   whole list via innerHTML, so the node has to be looked up after the re-render, by id.
+   Entries append chronologically (matching the PDF and the shared summary, both of which
+   iterate state.log directly), which means a new one lands at the BOTTOM — without this the
+   user has to scroll down and tap into the box every single time, mid-mission.
+
+   shouldFocus is false for quick-log entries: those arrive with their text already filled in,
+   so taking focus would pop the on-screen keyboard for no reason. They still get scrolled
+   into view, which is what confirms the entry landed. */
+function revealLogEntry(id, shouldFocus){
+  var el = document.querySelector('#logList [data-id="'+id+'"][data-field="notes"]');
+  if(!el) return;
+  if(el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
+  if(shouldFocus) el.focus();
+}
+
 function initLog(){
   renderLog();
   wireDynamicList('logList', function(){ return state.log; }, renderLog);
   document.getElementById('btnAddLog').addEventListener('click', function(){
     var n = new Date();
-    state.log.push({id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:''});
+    var entry = {id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:''};
+    state.log.push(entry);
     scheduleSave(); renderLog();
+    revealLogEntry(entry.id, true);
   });
   initQuickLog();
 }
@@ -2322,9 +2512,11 @@ var currentQuickLogOption = null;
 
 function logQuickEntry(text){
   var n = new Date();
-  state.log.push({id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:text});
+  var entry = {id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:text};
+  state.log.push(entry);
   scheduleSave();
   renderLog();
+  revealLogEntry(entry.id, false);
   toast('Logged ✔');
 }
 
@@ -2339,11 +2531,11 @@ function openQuickLogPopup(key){
   listEl.innerHTML = cfg.options.map(function(opt, idx){
     return '<button type="button" class="more-menu-item" data-idx="'+idx+'">'+escHtml(opt.label)+'</button>';
   }).join('');
-  document.getElementById('quickLogOverlay').classList.add('show');
+  openModal('quickLogOverlay');
 }
 
 function closeQuickLogPopup(){
-  document.getElementById('quickLogOverlay').classList.remove('show');
+  closeModal('quickLogOverlay');
   currentQuickLogKey = null;
   currentQuickLogOption = null;
 }
@@ -2398,6 +2590,7 @@ function initQuickLog(){
     var isOpen = qaBody.style.display !== 'none';
     qaBody.style.display = isOpen ? 'none' : '';
     qaToggle.classList.toggle('open', !isOpen);
+    qaToggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 
   document.getElementById('btnQuickTraining').addEventListener('click', function(){ openQuickLogPopup('training'); });
@@ -2602,6 +2795,7 @@ function initCommsLog(){
     var isOpen = body.style.display !== 'none';
     body.style.display = isOpen ? 'none' : '';
     toggle.classList.toggle('open', !isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 
   document.getElementById('importCommsLogInput').addEventListener('change', function(e){
@@ -3436,11 +3630,11 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
 }
 
 function exportPdf(){
-  document.getElementById('exportOptionsOverlay').classList.add('show');
+  openModal('exportOptionsOverlay');
 }
 
 function doExportPdf(includeCertification){
-  document.getElementById('exportOptionsOverlay').classList.remove('show');
+  closeModal('exportOptionsOverlay');
   var btn = document.getElementById('btnExport');
   var originalLabel = btn.innerHTML;
   btn.innerHTML = '<span class="ico">⏳</span>Preparing…';
@@ -3551,10 +3745,10 @@ function initRoster(){
   document.getElementById('btnMoreRoster').addEventListener('click', function(){
     closeMoreMenu();
     renderRosterList();
-    document.getElementById('rosterOverlay').classList.add('show');
+    openModal('rosterOverlay');
   });
   document.getElementById('rosterCloseBtn').addEventListener('click', function(){
-    document.getElementById('rosterOverlay').classList.remove('show');
+    closeModal('rosterOverlay');
     // Roster additions can change whether crew name fields show the search dropdown — refresh.
     renderShipCrew(); renderShuttleCrew();
   });
@@ -3562,11 +3756,11 @@ function initRoster(){
 
 /* ================= MORE MENU ================= */
 function closeMoreMenu(){
-  document.getElementById('moreOverlay').classList.remove('show');
+  closeModal('moreOverlay');
 }
 function initMoreMenu(){
   document.getElementById('btnMore').addEventListener('click', function(){
-    document.getElementById('moreOverlay').classList.add('show');
+    openModal('moreOverlay');
   });
   document.getElementById('moreCloseBtn').addEventListener('click', closeMoreMenu);
 }
@@ -3575,15 +3769,15 @@ function initMoreMenu(){
 var INTRO_SEEN_KEY = 'ucnHasSeenIntro_v1';
 function initIntroModal(){
   if(!localStorage.getItem(INTRO_SEEN_KEY)){
-    document.getElementById('introOverlay').classList.add('show');
+    openModal('introOverlay');
   }
   document.getElementById('btnIntroOk').addEventListener('click', function(){
     try{ localStorage.setItem(INTRO_SEEN_KEY, '1'); }catch(e){}
-    document.getElementById('introOverlay').classList.remove('show');
+    closeModal('introOverlay');
   });
   document.getElementById('btnMoreHelp').addEventListener('click', function(){
     closeMoreMenu();
-    document.getElementById('introOverlay').classList.add('show');
+    openModal('introOverlay');
   });
 }
 
@@ -3691,7 +3885,7 @@ function initExportOptions(){
   document.getElementById('btnExportWithCert').addEventListener('click', function(){ doExportPdf(true); });
   document.getElementById('btnExportNoCert').addEventListener('click', function(){ doExportPdf(false); });
   document.getElementById('btnExportCancel').addEventListener('click', function(){
-    document.getElementById('exportOptionsOverlay').classList.remove('show');
+    closeModal('exportOptionsOverlay');
   });
 }
 
@@ -3714,6 +3908,7 @@ function initServiceWorker(){
 window.addEventListener('resize', syncHeaderHeight);
 installUiFonts();
 initServiceWorker();
+initSaveFlush();
 initHeader();
 initTabs();
 initFlightCommander();
