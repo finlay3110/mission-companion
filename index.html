@@ -1811,12 +1811,7 @@ function initHeader(){
     scheduleSave();
   });
 
-  if(!state.opDate){
-    var n=new Date(); opDate.value = n.toISOString().slice(0,10); state.opDate = opDate.value;
-  }
-  if(!state.opTime){
-    var n2=new Date(); opTime.value = pad2(n2.getHours())+':'+pad2(n2.getMinutes()); state.opTime = opTime.value;
-  }
+  applyDateTimeDefaults();
 
   /* Restore the collapse choice before wiring the toggle. The header holds mission metadata you
      set once at the start, but it sat expanded over every tab for the whole mission, so
@@ -1851,6 +1846,35 @@ function initHeader(){
 
 function pad2(n){ return (n<10?'0':'')+n; }
 
+/* Bridge Command's fiction runs ahead of the real world — real 2026 is in-universe 2182. Held as
+   an offset rather than a hardcoded year so the default keeps up on its own as real years pass
+   (a session in real 2027 defaults to 2183) instead of needing an edit here every January. The
+   rollover therefore happens on 1 January of the real year. */
+var IN_UNIVERSE_YEAR_OFFSET = 156; // 2182 - 2026
+
+/* Today's date in the in-universe year, as YYYY-MM-DD for <input type="date">.
+   Built from the LOCAL date parts on purpose: toISOString() converts to UTC first, so an evening
+   session anywhere west of UTC would have been stamped with tomorrow's date. */
+function todayInUniverseISO(){
+  var n = new Date();
+  return (n.getFullYear() + IN_UNIVERSE_YEAR_OFFSET) + '-' + pad2(n.getMonth()+1) + '-' + pad2(n.getDate());
+}
+
+function nowLocalTime(){
+  var n = new Date();
+  return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
+}
+
+/* Fills Date/Time only when they're empty, so a saved mission never has its real date rewritten.
+   Called both at startup and from newMission(): this used to be inline in initHeader(), which
+   runs once, so starting a new mission left both fields blank with nothing to re-populate them. */
+function applyDateTimeDefaults(){
+  if(!state.opDate) state.opDate = todayInUniverseISO();
+  if(!state.opTime) state.opTime = nowLocalTime();
+  opDate.value = state.opDate;
+  opTime.value = state.opTime;
+}
+
 function syncHeaderHeight(){
   var h = document.getElementById('appHeader').offsetHeight;
   document.documentElement.style.setProperty('--header-h', h+'px');
@@ -1859,6 +1883,7 @@ function syncHeaderHeight(){
 function newMission(){
   if(!confirm('Start a new mission? This clears all current mission data (crew, notes, log, debrief) from this device.')) return;
   state = defaultState();
+  applyDateTimeDefaults();
   persist();
   renderAll();
   toast('New mission started');
