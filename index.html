@@ -2922,15 +2922,10 @@ function engFmtDuration(seconds){
 /* What to show in the Duration column. Deliberately three distinct outcomes:
    an instant event has no duration at all, an unfinished repair was still running at export
    (not corrupt, and no end time may be invented for it), and everything else has a real one. */
+/* Purely per-entry: every conduit in a group now gets its own row, so each one states its own
+   duration or its own "still running" rather than a group-level aggregate standing in for it. */
 function engStatusText(e){
   if(e.isInstant) return '—';
-  /* A grouped conduit action isn't finished until every conduit in it is. If any member was
-     still running at export the whole action reports as running; otherwise the longest member
-     stands for the action. Letting the first member's duration speak for the group would hide
-     an unfinished repair behind a completed-looking time. */
-  if(e.targets){
-    return e.groupRunning ? 'Still running' : engFmtDuration(e.groupMaxDuration);
-  }
   if(e.isRunning) return 'Still running';
   return engFmtDuration(e.durationSeconds);
 }
@@ -3027,50 +3022,59 @@ function normaliseEngineeringLog(parsed){
   };
 }
 
-/* Conduit failures usually arrive in groups and several sharing an identical startedAt were
-   logged as one action, so they're collapsed into a single row for display. Everything else
-   passes through untouched. */
-function groupEngEntries(entries){
-  var out = [];
-  var byStart = {};
+/* Conduit failures arrive in groups: several sharing an identical startedAt were logged as one
+   action. They are ANNOTATED as a group rather than merged into a single row, because merging
+   them means the row can only carry one member's location and duration — and on a real log the
+   conduits in one group are scattered around the ship with different durations each
+   (Bridge / Ready Room / two spots in Engineering, 2s through 5s). Collapsing them reported four
+   of those five locations as "Bridge", which is worse than not grouping at all. One row each
+   keeps every location and duration; groupSize/groupIndex let the renderer show the grouping.
+
+   Keyed by timestamp rather than by adjacency so a non-conduit entry sharing the same instant
+   can't split a group. */
+function markEngConduitGroups(entries){
+  var counts = {};
   entries.forEach(function(e){
-    if(e.kind !== 'conduit'){ out.push(e); return; }
+    if(e.kind !== 'conduit') return;
     var key = e.startedAt || '';
-    if(byStart.hasOwnProperty(key)){
-      var g = byStart[key];
-      g.targets.push(e.target);
-      /* Aggregate rather than letting the first member speak for the group — see engStatusText. */
-      if(e.isRunning) g.groupRunning = true;
-      if(typeof e.durationSeconds === 'number' && (g.groupMaxDuration == null || e.durationSeconds > g.groupMaxDuration)){
-        g.groupMaxDuration = e.durationSeconds;
-      }
-      return;
-    }
-    var grouped = Object.create(null);
-    for(var k in e){ if(e.hasOwnProperty(k)) grouped[k] = e[k]; }
-    grouped.targets = [e.target];
-    grouped.groupRunning = e.isRunning;
-    grouped.groupMaxDuration = e.durationSeconds;
-    byStart[key] = grouped;
-    out.push(grouped);
+    counts[key] = (counts[key] || 0) + 1;
   });
-  return out;
+  var seen = {};
+  return entries.map(function(e){
+    var row = Object.create(null);
+    for(var k in e){ if(e.hasOwnProperty(k)) row[k] = e[k]; }
+    if(e.kind === 'conduit'){
+      var key = e.startedAt || '';
+      row.groupSize = counts[key];
+      row.groupIndex = (seen[key] = (seen[key] == null ? 0 : seen[key] + 1));
+    } else {
+      row.groupSize = 1;
+      row.groupIndex = 0;
+    }
+    return row;
+  });
 }
 
-/* Display label for a row, folding a grouped conduit action back into one string. */
+/* The shared timestamp is the grouping signal, so it prints once on the first member of a group
+   and is left blank on the continuation rows. */
+function engTimeCell(e){
+  return (e.kind === 'conduit' && e.groupIndex > 0) ? '' : engFmtTime(e.startedAt);
+}
+
+/* The first row of a conduit group announces how many failed together; the rest are marked as
+   continuations of that one action. The conduit number itself lives in the Target column.
+
+   The marker is '»' rather than a nicer arrow because the embedded Exo 2 is subsetted: U+21B3 (↳)
+   and U+25B8 (▸) have no glyph and jsPDF drops them silently, leaving the cell looking untagged.
+   '»' and '·' are both present in the subset — check before swapping this for something prettier. */
 function engActionLabel(e){
-  /* The conduit numbers live in the Target column, so the Action column only needs to say
-     whether this was one conduit or several. */
   if(e.kind === 'conduit'){
-    return (e.targets && e.targets.length > 1) ? 'Conduits' : 'Conduit';
+    if(e.groupSize > 1) return e.groupIndex === 0 ? ('Conduits ×' + e.groupSize) : '» Conduit';
+    return 'Conduit';
   }
   return ENG_KIND_LABELS[e.kind] || (e.kind || 'Entry');
 }
 function engTargetLabel(e){
-  if(e.kind === 'conduit'){
-    var list = (e.targets || [e.target]).filter(function(t){ return t != null; });
-    return list.length ? list.join(', ') : '—';
-  }
   if(e.kind === 'hull') return (e.value == null ? '—' : e.value + '%');
   return e.target || '—';
 }
@@ -3985,6 +3989,7 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
 
     var engMeta = [];
     if(eng.operator.name) engMeta.push(['ENGINEER', eng.operator.name + (eng.operator.rank ? ' (' + eng.operator.rank + ')' : '')]);
+    if(eng.mission.name) engMeta.push(['MISSION', eng.mission.name + (eng.mission.type ? ' — ' + eng.mission.type : '')]);
     if(eng.ship.name) engMeta.push(['SHIP', eng.ship.name]);
     if(eng.spares.start != null && eng.spares.remaining != null){
       engMeta.push(['OCP SPARES', eng.spares.used + ' used, ' + eng.spares.remaining + ' of ' + eng.spares.start + ' remaining']);
@@ -3994,6 +3999,9 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(!eng.modules.damage) modsOff.push('Damage Control');
     /* Reported as switched off, which is what a false module means — not "no activity". */
     if(modsOff.length) engMeta.push(['MODULES OFF', modsOff.join(', ')]);
+    /* Provenance: worth having even when the operator left their name and mission blank,
+       which is exactly when the rest of this table is nearly empty. */
+    if(eng.exportedAt) engMeta.push(['EXPORTED', engFmtDateTime(eng.exportedAt)]);
     if(engMeta.length){
       pdfTable(doc, ['Field','Value'], engMeta, [42, PDF_CONTENT_W-42]);
     }
@@ -4010,8 +4018,8 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     }
 
     pdfSubHeading(doc, 'Actions');
-    var engRows = groupEngEntries(eng.entries).map(function(e){
-      return [engFmtTime(e.startedAt), engActionLabel(e), engTargetLabel(e), e.location || '—', engStatusText(e)];
+    var engRows = markEngConduitGroups(eng.entries).map(function(e){
+      return [engTimeCell(e), engActionLabel(e), engTargetLabel(e), e.location || '—', engStatusText(e)];
     });
     if(engRows.length){
       pdfTable(doc, ['Time','Action','Target','Location','Duration'], engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
