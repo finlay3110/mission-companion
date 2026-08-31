@@ -1217,6 +1217,27 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         </div>
       </div>
     </div>
+
+    <div class="nested-section" id="engLogSection">
+      <button type="button" class="nested-toggle" id="engLogToggle" aria-expanded="false" aria-controls="engLogBody">
+        <span>🔧 Engineering Log Import (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="engLogBody" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Engineer's exported action log (JSON) from the UCN Engineering Reference Tool to include it as its own section in the PDF report.</div>
+        <label class="add-btn" id="btnImportEngLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
+          ⬆ Import Engineering Log (JSON)
+          <input type="file" id="importEngLogInput" accept="application/json,.json" style="display:none;">
+        </label>
+        <div id="engLogSummary" style="display:none; margin-top:12px;">
+          <div class="card">
+            <div class="card-head"><span class="card-role">Engineering Log Loaded</span>
+              <button type="button" class="del-x" id="btnRemoveEngLog">✕</button></div>
+            <div id="engLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -1457,6 +1478,7 @@ function defaultState(){
     promotions: [],
     medals: [],
     commsLog: null,
+    engineeringLog: null,
     trainingComplete: false
   };
 }
@@ -2762,6 +2784,7 @@ function initDebrief(){
   });
 
   initCommsLog();
+  initEngineeringLog();
 }
 
 /* ================= COMMS LOG IMPORT ================= */
@@ -2853,6 +2876,303 @@ function initCommsLog(){
   });
 }
 
+/* ================= ENGINEERING LOG IMPORT ================= */
+/* Imports an export from the UCN Engineering Reference Tool ("ucn.engineering.log/1").
+   Built to the same shape as the comms log import above: one log at a time, a summary card
+   here, full detail in the PDF. */
+
+var ENG_SCHEMA = 'ucn.engineering.log/1';
+
+/* cellSwap / hull / note are instantaneous events, not repairs. They carry endedAt === startedAt
+   and a null durationSeconds, and must never be presented as zero-length repairs. A power cell
+   swap in particular is deliberately its own action rather than a repair. */
+var ENG_INSTANT_KINDS = ['cellSwap','hull','note'];
+
+var ENG_KIND_LABELS = {
+  ocp:'OCP Repair', crystal:'Crystal Swap', conduit:'Conduit',
+  reactor:'Reactor', cellSwap:'Power Cell Swap', hull:'Hull Reading', note:'Note'
+};
+var ENG_KIND_ORDER = ['ocp','crystal','conduit','reactor','cellSwap','hull','note'];
+
+function engIsInstant(kind){ return ENG_INSTANT_KINDS.indexOf(kind) !== -1; }
+
+/* Times in the file are ISO 8601 UTC; the log was kept in the operator's local time and is read
+   back in the reader's. new Date() parses the trailing Z correctly, and the getters below are
+   all local, so this converts rather than just reformatting the string. */
+function engParseDate(iso){
+  if(!iso || typeof iso !== 'string') return null;
+  var d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+function engFmtTime(iso){
+  var d = engParseDate(iso);
+  return d ? pad2(d.getHours())+':'+pad2(d.getMinutes()) : '—';
+}
+function engFmtDateTime(iso){
+  var d = engParseDate(iso);
+  if(!d) return '—';
+  return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());
+}
+function engFmtDuration(seconds){
+  if(typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) return '—';
+  if(seconds < 60) return seconds + 's';
+  return Math.floor(seconds/60) + 'm ' + pad2(seconds % 60) + 's';
+}
+
+/* What to show in the Duration column. Deliberately three distinct outcomes:
+   an instant event has no duration at all, an unfinished repair was still running at export
+   (not corrupt, and no end time may be invented for it), and everything else has a real one. */
+function engStatusText(e){
+  if(e.isInstant) return '—';
+  /* A grouped conduit action isn't finished until every conduit in it is. If any member was
+     still running at export the whole action reports as running; otherwise the longest member
+     stands for the action. Letting the first member's duration speak for the group would hide
+     an unfinished repair behind a completed-looking time. */
+  if(e.targets){
+    return e.groupRunning ? 'Still running' : engFmtDuration(e.groupMaxDuration);
+  }
+  if(e.isRunning) return 'Still running';
+  return engFmtDuration(e.durationSeconds);
+}
+
+/* Throws with a specific message rather than guessing at the shape of an unknown file. */
+function normaliseEngineeringLog(parsed){
+  if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+    throw new Error('That file isn\'t a UCN engineering log — it should be a single JSON object.');
+  }
+  if(!parsed.schema){
+    throw new Error('That file has no "schema" field, so it isn\'t a UCN engineering log export.');
+  }
+  if(parsed.schema !== ENG_SCHEMA){
+    throw new Error('Unsupported log format "' + String(parsed.schema) + '". This app reads "' + ENG_SCHEMA + '".');
+  }
+
+  var srcShip = (parsed.ship && typeof parsed.ship === 'object') ? parsed.ship : {};
+  var srcSpares = (parsed.spares && typeof parsed.spares === 'object') ? parsed.spares : {};
+  var srcHull = (parsed.hull && typeof parsed.hull === 'object') ? parsed.hull : {};
+  var srcOp = (parsed.operator && typeof parsed.operator === 'object') ? parsed.operator : {};
+  var srcMission = (parsed.mission && typeof parsed.mission === 'object') ? parsed.mission : {};
+  var srcModules = (parsed.modules && typeof parsed.modules === 'object') ? parsed.modules : {};
+
+  /* Entry ids are only unique within a single file, so they're namespaced on the way in. Only
+     one log is held at a time today, but this keeps merging several exports a non-breaking
+     change rather than something needing a data migration later. */
+  var stamp = Date.now().toString(36);
+
+  var entries = (Array.isArray(parsed.entries) ? parsed.entries : [])
+    .filter(function(e){ return e && typeof e === 'object'; })
+    .map(function(e){
+      var kind = typeof e.kind === 'string' ? e.kind : '';
+      var instant = engIsInstant(kind);
+      return {
+        id: stamp + ':' + (e.id == null ? '' : String(e.id)),
+        kind: kind,
+        target: e.target == null ? null : String(e.target),
+        location: e.location == null ? null : String(e.location),
+        value: typeof e.value === 'number' ? e.value : null,
+        note: e.note == null ? null : String(e.note),
+        /* Per entry, because the operator may have switched ship mid-mission. */
+        ship: e.ship == null ? (srcShip.id || null) : String(e.ship),
+        startedAt: e.startedAt == null ? null : String(e.startedAt),
+        endedAt: e.endedAt == null ? null : String(e.endedAt),
+        durationSeconds: typeof e.durationSeconds === 'number' ? e.durationSeconds : null,
+        isInstant: instant,
+        /* Only a timed kind can be "still running"; an instant event is simply done. */
+        isRunning: !instant && e.endedAt == null
+      };
+    });
+
+  /* File order isn't guaranteed. */
+  entries.sort(function(a,b){
+    var at = engParseDate(a.startedAt), bt = engParseDate(b.startedAt);
+    return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
+  });
+
+  /* Counts come from the entries, never from the file's "totals" — that field is derived and
+     the spec says to recompute rather than trust it. */
+  var totals = {};
+  ENG_KIND_ORDER.forEach(function(k){ totals[k] = 0; });
+  entries.forEach(function(e){
+    if(totals.hasOwnProperty(e.kind)) totals[e.kind]++;
+  });
+
+  var start = typeof srcSpares.start === 'number' ? srcSpares.start : null;
+  var remaining = typeof srcSpares.remaining === 'number' ? srcSpares.remaining : null;
+
+  var readings = (Array.isArray(srcHull.readings) ? srcHull.readings : [])
+    .filter(function(r){ return r && typeof r === 'object' && typeof r.value === 'number'; })
+    .map(function(r){ return {at: r.at == null ? null : String(r.at), value: r.value}; });
+
+  return {
+    schema: ENG_SCHEMA,
+    exportedAt: parsed.exportedAt == null ? null : String(parsed.exportedAt),
+    operator: {name: srcOp.name == null ? '' : String(srcOp.name), rank: srcOp.rank == null ? '' : String(srcOp.rank)},
+    mission: {
+      name: srcMission.name == null ? '' : String(srcMission.name),
+      type: srcMission.type == null ? '' : String(srcMission.type),
+      startedAt: srcMission.startedAt == null ? '' : String(srcMission.startedAt)
+    },
+    ship: {id: srcShip.id == null ? '' : String(srcShip.id), name: srcShip.name == null ? '' : String(srcShip.name)},
+    /* Only an explicit false means "switched off"; anything else is treated as in use. */
+    modules: {power: srcModules.power !== false, damage: srcModules.damage !== false},
+    /* "used" is derived, so it's recomputed rather than trusted. */
+    spares: {start: start, remaining: remaining, used: (start != null && remaining != null) ? (start - remaining) : null},
+    hull: {
+      latest: typeof srcHull.latest === 'number' ? srcHull.latest : null,
+      latestAt: srcHull.latestAt == null ? null : String(srcHull.latestAt),
+      readings: readings
+    },
+    totals: totals,
+    entries: entries
+  };
+}
+
+/* Conduit failures usually arrive in groups and several sharing an identical startedAt were
+   logged as one action, so they're collapsed into a single row for display. Everything else
+   passes through untouched. */
+function groupEngEntries(entries){
+  var out = [];
+  var byStart = {};
+  entries.forEach(function(e){
+    if(e.kind !== 'conduit'){ out.push(e); return; }
+    var key = e.startedAt || '';
+    if(byStart.hasOwnProperty(key)){
+      var g = byStart[key];
+      g.targets.push(e.target);
+      /* Aggregate rather than letting the first member speak for the group — see engStatusText. */
+      if(e.isRunning) g.groupRunning = true;
+      if(typeof e.durationSeconds === 'number' && (g.groupMaxDuration == null || e.durationSeconds > g.groupMaxDuration)){
+        g.groupMaxDuration = e.durationSeconds;
+      }
+      return;
+    }
+    var grouped = Object.create(null);
+    for(var k in e){ if(e.hasOwnProperty(k)) grouped[k] = e[k]; }
+    grouped.targets = [e.target];
+    grouped.groupRunning = e.isRunning;
+    grouped.groupMaxDuration = e.durationSeconds;
+    byStart[key] = grouped;
+    out.push(grouped);
+  });
+  return out;
+}
+
+/* Display label for a row, folding a grouped conduit action back into one string. */
+function engActionLabel(e){
+  /* The conduit numbers live in the Target column, so the Action column only needs to say
+     whether this was one conduit or several. */
+  if(e.kind === 'conduit'){
+    return (e.targets && e.targets.length > 1) ? 'Conduits' : 'Conduit';
+  }
+  return ENG_KIND_LABELS[e.kind] || (e.kind || 'Entry');
+}
+function engTargetLabel(e){
+  if(e.kind === 'conduit'){
+    var list = (e.targets || [e.target]).filter(function(t){ return t != null; });
+    return list.length ? list.join(', ') : '—';
+  }
+  if(e.kind === 'hull') return (e.value == null ? '—' : e.value + '%');
+  return e.target || '—';
+}
+
+function engRunningCount(log){
+  return (log.entries || []).filter(function(e){ return e.isRunning; }).length;
+}
+
+function renderEngLogSummary(){
+  var wrap = document.getElementById('engLogSummary');
+  var text = document.getElementById('engLogSummaryText');
+  if(!wrap || !text) return;
+  var log = state.engineeringLog;
+  if(!log){ wrap.style.display = 'none'; return; }
+
+  var parts = [];
+  if(log.operator.name) parts.push('Engineer: ' + log.operator.name + (log.operator.rank ? ' (' + log.operator.rank + ')' : ''));
+  if(log.mission.name) parts.push('Mission: ' + log.mission.name + (log.mission.type ? ' — ' + log.mission.type : ''));
+  if(log.ship.name) parts.push('Ship: ' + log.ship.name);
+
+  /* A false module means that section was switched off, not that it saw no activity — so it's
+     reported as "off" rather than as an absence of entries. */
+  var off = [];
+  if(!log.modules.power) off.push('Power');
+  if(!log.modules.damage) off.push('Damage Control');
+  if(off.length) parts.push('Modules off: ' + off.join(', '));
+
+  if(log.spares.start != null && log.spares.remaining != null){
+    parts.push('OCP spares: ' + log.spares.remaining + ' of ' + log.spares.start + ' left (' + log.spares.used + ' used)');
+  }
+  if(log.hull.latest != null){
+    parts.push('Hull: ' + log.hull.latest + '% at ' + engFmtTime(log.hull.latestAt) +
+      (log.hull.readings.length > 1 ? ' (' + log.hull.readings.length + ' readings)' : ''));
+  }
+
+  var counts = ENG_KIND_ORDER
+    .filter(function(k){ return log.totals[k]; })
+    .map(function(k){ return log.totals[k] + ' × ' + ENG_KIND_LABELS[k]; });
+  parts.push(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies') + (counts.length ? ' — ' + counts.join(', ') : ''));
+
+  var running = engRunningCount(log);
+  if(running) parts.push(running + ' repair' + (running===1?'':'s') + ' still running at export');
+
+  /* escHtml on every part: operator, mission and note text are all untrusted file input. */
+  text.innerHTML = parts.map(function(p){ return escHtml(p); }).join('<br>');
+  wrap.style.display = '';
+}
+
+function initEngineeringLog(){
+  renderEngLogSummary();
+
+  var toggle = document.getElementById('engLogToggle');
+  var body = document.getElementById('engLogBody');
+  toggle.addEventListener('click', function(){
+    var isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : '';
+    toggle.classList.toggle('open', !isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  });
+
+  document.getElementById('importEngLogInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var normalised;
+      try{
+        normalised = normaliseEngineeringLog(JSON.parse(reader.result));
+      }catch(err){
+        /* SyntaxError means the file wasn't JSON at all; anything else is our own schema
+           message, which already says exactly what was wrong. */
+        alert(err instanceof SyntaxError
+          ? 'Could not read that file — it isn\'t valid JSON.'
+          : err.message);
+        e.target.value = '';
+        return;
+      }
+      if(state.engineeringLog && !confirm('An engineering log is already loaded. Replace it with this one?')){
+        e.target.value = '';
+        return;
+      }
+      state.engineeringLog = normalised;
+      if(!persist()){
+        /* persist() reports quota failures loudly; a large log is the likely cause here. */
+        toast('Log imported but could not be saved — storage is full ⚠️');
+      } else {
+        toast('Engineering log imported ✔');
+      }
+      renderEngLogSummary();
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('btnRemoveEngLog').addEventListener('click', function(){
+    if(!confirm('Remove the imported engineering log? It will no longer appear in the PDF export.')) return;
+    state.engineeringLog = null;
+    scheduleSave();
+    renderEngLogSummary();
+  });
+}
+
 /* ================= UTIL: ESCAPING ================= */
 function escHtml(s){
   return (s==null?'':String(s)).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
@@ -2914,6 +3234,7 @@ function renderAll(){
   document.getElementById('outcomeText').value = state.outcome;
   renderPromotions(); renderMedals();
   renderCommsLogSummary();
+  renderEngLogSummary();
   updateQuickLogButtonsVisibility();
 }
 
@@ -3423,6 +3744,53 @@ function pdfCommsLogEntry(doc, timestamp, shipName, text){
   pdfCursorY += boxH + 2.5;
 }
 
+/* Hull integrity across the mission. The y-axis is pinned to 0-100 rather than scaled to the
+   data so that two missions' charts can be compared at a glance, and so a hull that only ever
+   dipped slightly doesn't render as a dramatic collapse. Points are spaced evenly by reading
+   index rather than by timestamp: readings are taken at irregular moments and a time-scaled
+   x-axis would bunch them unreadably. */
+function pdfHullChart(doc, readings){
+  var chartH = 42, padL = 12, padB = 8;
+  pdfEnsureSpace(doc, chartH + 10);
+  var x0 = PDF_MARGIN_L + padL;
+  var y0 = pdfCursorY;
+  var w = PDF_CONTENT_W - padL;
+  var plotH = chartH - padB;
+
+  doc.setDrawColor(PDF_LINE[0],PDF_LINE[1],PDF_LINE[2]);
+  doc.setLineWidth(0.2);
+  doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(7);
+  doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
+  [0,25,50,75,100].forEach(function(pct){
+    var gy = y0 + plotH - (pct/100)*plotH;
+    doc.line(x0, gy, x0 + w, gy);
+    doc.text(String(pct), x0 - 2, gy + 1.2, {align:'right'});
+  });
+
+  doc.setDrawColor(PDF_ORANGE[0],PDF_ORANGE[1],PDF_ORANGE[2]);
+  doc.setLineWidth(0.7);
+  var step = readings.length > 1 ? w / (readings.length - 1) : 0;
+  var pt = function(i){
+    var v = Math.max(0, Math.min(100, readings[i].value));
+    return {x: x0 + step*i, y: y0 + plotH - (v/100)*plotH};
+  };
+  for(var i = 1; i < readings.length; i++){
+    var a = pt(i-1), b = pt(i);
+    doc.line(a.x, a.y, b.x, b.y);
+  }
+  doc.setFillColor(PDF_ORANGE[0],PDF_ORANGE[1],PDF_ORANGE[2]);
+  for(var j = 0; j < readings.length; j++){
+    var p = pt(j);
+    doc.circle(p.x, p.y, 0.7, 'F');
+  }
+
+  /* Label only the ends: one reading per point would overlap badly on a busy mission. */
+  doc.setFontSize(7); doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
+  doc.text(engFmtTime(readings[0].at), x0, y0 + plotH + 5);
+  doc.text(engFmtTime(readings[readings.length-1].at), x0 + w, y0 + plotH + 5, {align:'right'});
+  pdfCursorY += chartH + 6;
+}
+
 function pdfCoverPage(doc, s, navyLogoDataUrl){
   pdfDrawFrame(doc);
   pdfCursorY = PDF_MARGIN_TOP;
@@ -3608,6 +3976,55 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
       commsOverall.forEach(function(e){ pdfCommsLogEntry(doc, e.time, e.shipName, e.text); });
     } else {
       pdfParagraph(doc, 'No communications entries recorded.', {italic:true, color:PDF_MUTED});
+    }
+  }
+
+  if(s.engineeringLog && s.engineeringLog.entries){
+    var eng = s.engineeringLog;
+    pdfSectionStart(doc, 'Engineering Log', tocEntries);
+
+    var engMeta = [];
+    if(eng.operator.name) engMeta.push(['ENGINEER', eng.operator.name + (eng.operator.rank ? ' (' + eng.operator.rank + ')' : '')]);
+    if(eng.ship.name) engMeta.push(['SHIP', eng.ship.name]);
+    if(eng.spares.start != null && eng.spares.remaining != null){
+      engMeta.push(['OCP SPARES', eng.spares.used + ' used, ' + eng.spares.remaining + ' of ' + eng.spares.start + ' remaining']);
+    }
+    var modsOff = [];
+    if(!eng.modules.power) modsOff.push('Power');
+    if(!eng.modules.damage) modsOff.push('Damage Control');
+    /* Reported as switched off, which is what a false module means — not "no activity". */
+    if(modsOff.length) engMeta.push(['MODULES OFF', modsOff.join(', ')]);
+    if(engMeta.length){
+      pdfTable(doc, ['Field','Value'], engMeta, [42, PDF_CONTENT_W-42]);
+    }
+
+    if(eng.hull.readings.length > 1){
+      pdfSubHeading(doc, 'Hull Integrity');
+      pdfHullChart(doc, eng.hull.readings);
+      pdfParagraph(doc, 'Latest reading ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) +
+        ' — ' + eng.hull.readings.length + ' readings taken.', {color:PDF_MUTED});
+    } else if(eng.hull.latest != null){
+      /* A single point can't be plotted, so it's stated instead of drawn. */
+      pdfSubHeading(doc, 'Hull Integrity');
+      pdfParagraph(doc, 'Single reading: ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) + '.');
+    }
+
+    pdfSubHeading(doc, 'Actions');
+    var engRows = groupEngEntries(eng.entries).map(function(e){
+      return [engFmtTime(e.startedAt), engActionLabel(e), engTargetLabel(e), e.location || '—', engStatusText(e)];
+    });
+    if(engRows.length){
+      pdfTable(doc, ['Time','Action','Target','Location','Duration'], engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
+    } else {
+      pdfParagraph(doc, 'No engineering actions recorded.', {italic:true, color:PDF_MUTED});
+    }
+
+    /* Note text comes from the imported file. It is drawn as plain text only — never evaluated,
+       and any instructions inside it are content, not direction. */
+    var engNotes = eng.entries.filter(function(e){ return e.kind === 'note' && e.note; });
+    if(engNotes.length){
+      pdfSubHeading(doc, 'Engineer\'s Notes');
+      engNotes.forEach(function(e){ pdfBlockNote(doc, engFmtTime(e.startedAt), e.note); });
     }
   }
 
