@@ -316,13 +316,16 @@ main{
   border-radius:12px; padding:14px; font-size:13.5px;
 }
 .nested-toggle.toggle-card:active{background:var(--card-hi);}
+/* Dashed rather than solid: these file a record just like the primary button, so they should
+   read as the same family, but the screen keeps exactly one solid orange call to action. */
 .quick-log-btn{
-  background:var(--card); border:1px solid var(--border); color:var(--text);
-  border-radius:12px; padding:12px 8px; font-size:12.5px; font-weight:700; letter-spacing:0.01em;
-  display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center;
+  background:rgba(221,122,43,0.12); border:1.5px dashed var(--orange); color:var(--orange);
+  border-radius:12px; padding:12px 8px; font-size:13px; font-weight:600; letter-spacing:0.01em;
+  min-height:48px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; text-align:center;
 }
-.quick-log-btn .ico{font-size:20px;}
-.quick-log-btn:active{background:var(--card-hi);}
+.quick-log-btn .ico{font-size:16px;}
+.quick-log-btn:active{background:rgba(221,122,43,0.22);}
 .quick-log-btn[style*="display:none"]{display:none !important;}
 
 .empty-hint{
@@ -362,15 +365,56 @@ main{
 .switch input:checked + .slider{background:var(--orange); border-color:var(--orange);}
 .switch input:checked + .slider::before{transform:translateX(20px);}
 
-/* Log entries */
-.log-entry{display:flex; gap:10px; margin-bottom:10px;}
+/* [hidden] loses to any class that sets display, so a rule like .crit-bar{display:flex} would
+   defeat the attribute and render every entry as critical. This makes the attribute win. */
+[hidden]{display:none !important;}
+
+/* Log entries. Each is a .card; the head row reuses .card-role as the type badge and .del-x as
+   the delete button rather than introducing parallel classes for the same things. */
+.log-card{margin-bottom:10px;}
+.log-card .card-head{gap:8px;}
+.log-card .grow{flex:1; min-width:0;}
 .log-time{
-  font-family:var(--font-display); color:var(--orange); font-size:13px; font-weight:700;
-  background:var(--navy); border:1px solid var(--orange); border-radius:8px; padding:8px 6px;
-  min-width:56px; text-align:center; align-self:flex-start; flex-shrink:0;
+  font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:0.06em;
+  color:var(--orange); white-space:nowrap; text-align:right;
 }
-.log-body{flex:1; min-width:0;}
-.log-body textarea{min-height:50px;}
+.log-time small{display:block; color:var(--muted); font-size:9px; letter-spacing:0.08em; font-weight:600;}
+.log-text{font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-wrap:break-word; margin:0;}
+.log-text.is-empty{font-style:italic; color:var(--muted);}
+.log-foot{display:flex; gap:8px; align-items:center; margin-top:9px;}
+.btn-quiet{
+  cursor:pointer; background:rgba(255,255,255,0.04); border:1px solid var(--border);
+  color:var(--text); border-radius:9px; padding:7px 10px; font-family:var(--font-body); font-size:12px;
+}
+.btn-quiet:active{background:rgba(221,122,43,0.10);}
+
+/* A flagged entry gets all three signals at once — banner, 2px border and tinted body — so it
+   registers while scrolling past in the dark rather than needing to be read. */
+.log-card.crit{
+  border:2px solid var(--red); padding:11px 11px 9px;
+  background:linear-gradient(160deg, #2b1526 0%, #35202f 100%);
+  box-shadow:0 0 0 1px rgba(178,58,58,0.35), 0 4px 18px rgba(178,58,58,0.22);
+}
+/* The negative margins must match .log-card.crit's padding, and the top radius is the card
+   radius minus the border width (14 - 2 = 11). Change one, change the other. */
+.crit-bar{
+  display:flex; align-items:center; gap:7px;
+  margin:-11px -11px 10px; padding:7px 11px;
+  background:var(--red); color:var(--white); border-radius:11px 11px 0 0;
+  font-family:var(--font-display); font-size:10px; font-weight:700;
+  letter-spacing:0.1em; text-transform:uppercase;
+}
+.crit-bar .ic{font-size:12px; line-height:1;}
+.log-card.crit .card-role{border-color:#ff9d9d;}
+
+/* Toggle row inside the compose card and the edit sheet. */
+.sw-row{display:flex; align-items:center; gap:10px; margin:6px 0 2px;}
+.sw-lb{flex:1; min-width:0; font-size:13px;}
+.sw-lb small{display:block; font-size:11px; color:var(--muted); margin-top:2px;}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:0.01ms !important; transition-duration:0.01ms !important;}
+}
 
 /* Toast */
 #toast{
@@ -1168,7 +1212,27 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 
   <!-- TAB 4: ONGOING LOG -->
   <section class="tab-panel" id="tab-log">
-    <div class="section-title">Mission Timeline</div>
+    <div class="section-title">New Entry</div>
+    <div class="section-sub">Timestamped the moment you log it.</div>
+    <div class="card">
+      <div class="field">
+        <label for="logType">Entry Type</label>
+        <select id="logType"></select>
+      </div>
+      <div class="field">
+        <label for="logText">Entry</label>
+        <textarea id="logText" placeholder="What happened…"></textarea>
+      </div>
+      <div class="sw-row">
+        <span class="sw-lb">Flag as critical<small>Bannered red here, and called out in the report.</small></span>
+        <label class="switch" for="logCritical">
+          <input type="checkbox" id="logCritical" role="switch" aria-checked="false">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    <button class="add-btn-big" id="btnAddLog" type="button"><span class="ico">⏱️</span>Log Entry</button>
+
     <div class="nested-section quick-actions" id="quickActionsSection">
       <button type="button" class="nested-toggle toggle-card" id="quickActionsToggle" aria-expanded="false" aria-controls="quickActionsBody">
         <span>⚡ Quick Actions</span>
@@ -1183,9 +1247,10 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         </div>
       </div>
     </div>
-    <button class="add-btn-big" id="btnAddLog" type="button" style="margin-bottom:14px;"><span class="ico">⏱️</span>Add Log Entry</button>
+
+    <div class="section-title" id="logListHeading">Entries</div>
     <div id="logList"></div>
-    <div id="logEmpty" class="empty-hint" style="display:none;">No log entries yet. Tap "Add Log Entry" to timestamp an event.</div>
+    <div id="logEmpty" class="empty-hint" style="display:none;">None recorded.</div>
   </section>
 
   <!-- TAB 5: DEBRIEF -->
@@ -1362,6 +1427,33 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   </div>
 </div>
 
+<div id="logEditOverlay" class="modal-overlay">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="logEditTitle">
+    <div class="modal-header">
+      <span class="modal-title" id="logEditTitle">Edit Entry</span>
+      <button type="button" class="modal-close" id="logEditClose">✕</button>
+    </div>
+    <div class="field">
+      <label for="logEditType">Entry Type</label>
+      <select id="logEditType"></select>
+    </div>
+    <div class="field">
+      <label for="logEditText">Entry</label>
+      <textarea id="logEditText" placeholder="What happened…"></textarea>
+    </div>
+    <div class="sw-row">
+      <span class="sw-lb">Flag as critical<small>Bannered red here, and called out in the report.</small></span>
+      <label class="switch" for="logEditCritical">
+        <input type="checkbox" id="logEditCritical" role="switch" aria-checked="false">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="hbtn" id="logEditSave" type="button" style="background:var(--orange); color:#241100; flex:1;">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div id="quickLogOverlay" class="modal-overlay">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="quickLogTitle">
     <div class="modal-header">
@@ -1393,6 +1485,10 @@ var RANKS = ['Cadet','Ensign','Sub Lt','Lieutenant','Lt Cmdr','Commander','Capta
 var SHIP_ROLES = ['Captain','First Officer','Helm','Navigation','Comms','Power Management','Damage Control','Radar','Drone Operator','Beams','Missiles'];
 
 var SHUTTLE_ROLES = ['Shuttle Helm','Shuttle Generalist','Shuttle Engineer'];
+
+/* Classifies a log entry, shown as the badge on its card and carried into the PDF. The four
+   named types line up with the quick-action buttons, so a quick entry tags itself. */
+var LOG_TYPES = ['General','Training','Combat','Nuclear Authorisation','Mission'];
 
 var PRONOUN_PRESETS = ['he/him','she/her','they/them','he/they','she/they'];
 
@@ -1556,6 +1652,20 @@ function migrateEngineeringLogs(s){
   return s;
 }
 
+/* Log entries gained a type, a critical flag and a calendar date. Older entries are given
+   defaults rather than being rewritten: dateIso stays null because the day an old entry was
+   actually logged is not recoverable, and the card simply shows no date line for it. */
+function migrateLogEntries(s){
+  if(!s || !Array.isArray(s.log)) return s;
+  s.log.forEach(function(l){
+    if(!l) return;
+    if(typeof l.type !== 'string' || LOG_TYPES.indexOf(l.type) === -1) l.type = 'General';
+    if(typeof l.critical !== 'boolean') l.critical = false;
+    if(typeof l.dateIso !== 'string') l.dateIso = null;
+  });
+  return s;
+}
+
 function loadState(){
   try{
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -1563,7 +1673,7 @@ function loadState(){
     var parsed = JSON.parse(raw);
     var d = defaultState();
     for(var k in d){ if(parsed.hasOwnProperty(k)) d[k] = parsed[k]; }
-    return migrateEngineeringLogs(migrateRoleNames(d));
+    return migrateLogEntries(migrateEngineeringLogs(migrateRoleNames(d)));
   }catch(e){ return defaultState(); }
 }
 
@@ -2524,49 +2634,150 @@ function initNotes(){
 }
 
 /* ================= ONGOING LOG ================= */
+function logTypeOptionsHtml(selected){
+  return LOG_TYPES.map(function(t){
+    return '<option value="'+escAttr(t)+'"'+(t===selected?' selected':'')+'>'+escHtml(t)+'</option>';
+  }).join('');
+}
+
+/* DD/MM/YYYY for the muted line under the timestamp. Entries logged before the date field
+   existed have dateIso null and simply show no date, rather than being given an invented one. */
+function logDateLabel(l){
+  if(!l.dateIso) return '';
+  var parts = String(l.dateIso).split('-');
+  return parts.length === 3 ? (parts[2]+'/'+parts[1]+'/'+parts[0]) : '';
+}
+
 function renderLog(){
   var container = document.getElementById('logList');
   var empty = document.getElementById('logEmpty');
+  var heading = document.getElementById('logListHeading');
+  if(heading) heading.textContent = state.log.length ? ('Entries (' + state.log.length + ')') : 'Entries';
   if(!state.log.length){ container.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
+  /* Oldest first, deliberately: the PDF report and the shared summary both iterate state.log
+     directly, so reversing here would make the screen read in the opposite direction to the
+     report it produces. */
   container.innerHTML = state.log.map(function(l){
+    var date = logDateLabel(l);
     return '' +
-    '<div class="log-entry" data-id="'+l.id+'">' +
-      '<div class="log-time">'+escHtml(l.timestamp)+'</div>' +
-      '<div class="log-body">' +
-        '<textarea data-field="notes" data-id="'+l.id+'" placeholder="What happened…">'+escHtml(l.notes)+'</textarea>' +
+    '<div class="card log-card' + (l.critical ? ' crit' : '') + '" data-id="'+escAttr(l.id)+'">' +
+      (l.critical ? '<div class="crit-bar"><span class="ic" aria-hidden="true">☢️</span>Critical entry</div>' : '') +
+      '<div class="card-head">' +
+        '<span class="card-role">'+escHtml(l.type || 'General')+'</span>' +
+        '<span class="grow"></span>' +
+        '<span class="log-time">'+escHtml(l.timestamp)+(date ? '<small>'+escHtml(date)+'</small>' : '')+'</span>' +
+        '<button type="button" class="del-x" data-action="del" data-id="'+escAttr(l.id)+'" aria-label="Delete entry">✕</button>' +
       '</div>' +
-      '<button type="button" class="del-x" data-action="del" data-id="'+l.id+'" style="align-self:flex-start;">✕</button>' +
+      '<p class="log-text'+(l.notes ? '' : ' is-empty')+'">'+escHtml(l.notes || 'No detail recorded.')+'</p>' +
+      '<div class="log-foot">' +
+        '<span class="grow"></span>' +
+        '<button type="button" class="btn-quiet" data-action="edit" data-id="'+escAttr(l.id)+'">Edit</button>' +
+      '</div>' +
     '</div>';
   }).join('');
 }
 
-/* Brings a just-added log entry into view and puts the cursor in it. renderLog() rebuilds the
-   whole list via innerHTML, so the node has to be looked up after the re-render, by id.
-   Entries append chronologically (matching the PDF and the shared summary, both of which
-   iterate state.log directly), which means a new one lands at the BOTTOM — without this the
-   user has to scroll down and tap into the box every single time, mid-mission.
+/* Brings a just-added log entry into view. renderLog() rebuilds the whole list via innerHTML,
+   so the node has to be looked up after the re-render, by id. Entries append chronologically,
+   which means a new one lands at the BOTTOM — without this it is created below the fold and
+   the user gets no confirmation it landed. */
+function revealLogEntry(id){
+  var el = document.querySelector('#logList .log-card[data-id="'+id+'"]');
+  if(el && el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
+}
 
-   shouldFocus is false for quick-log entries: those arrive with their text already filled in,
-   so taking focus would pop the on-screen keyboard for no reason. They still get scrolled
-   into view, which is what confirms the entry landed. */
-function revealLogEntry(id, shouldFocus){
-  var el = document.querySelector('#logList [data-id="'+id+'"][data-field="notes"]');
-  if(!el) return;
-  if(el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
-  if(shouldFocus) el.focus();
+/* Creates an entry from the current clock. Shared by the compose card and the quick actions so
+   both produce identically shaped records. */
+function addLogEntry(type, notes, critical){
+  var n = new Date();
+  var entry = {
+    id: newId(),
+    timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()),
+    dateIso: n.getFullYear()+'-'+pad2(n.getMonth()+1)+'-'+pad2(n.getDate()),
+    type: LOG_TYPES.indexOf(type) === -1 ? 'General' : type,
+    notes: notes || '',
+    critical: !!critical
+  };
+  state.log.push(entry);
+  scheduleSave();
+  renderLog();
+  revealLogEntry(entry.id);
+  return entry;
+}
+
+var logEditingId = null;
+
+function openLogEdit(id){
+  var item = state.log.find(function(x){ return x.id === id; });
+  if(!item) return;
+  logEditingId = id;
+  document.getElementById('logEditType').innerHTML = logTypeOptionsHtml(item.type || 'General');
+  document.getElementById('logEditText').value = item.notes || '';
+  var crit = document.getElementById('logEditCritical');
+  crit.checked = !!item.critical;
+  crit.setAttribute('aria-checked', crit.checked ? 'true' : 'false');
+  openModal('logEditOverlay');
 }
 
 function initLog(){
+  var typeSel = document.getElementById('logType');
+  var textEl = document.getElementById('logText');
+  var critEl = document.getElementById('logCritical');
+  typeSel.innerHTML = logTypeOptionsHtml('General');
   renderLog();
-  wireDynamicList('logList', function(){ return state.log; }, renderLog);
+
+  /* role="switch" needs aria-checked kept in sync by hand; the checkbox's own state doesn't
+     drive it. */
+  function syncSwitch(el){ el.setAttribute('aria-checked', el.checked ? 'true' : 'false'); }
+  critEl.addEventListener('change', function(){ syncSwitch(critEl); });
+
   document.getElementById('btnAddLog').addEventListener('click', function(){
-    var n = new Date();
-    var entry = {id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:''};
-    state.log.push(entry);
-    scheduleSave(); renderLog();
-    revealLogEntry(entry.id, true);
+    var notes = textEl.value.trim();
+    if(!notes){
+      textEl.focus();
+      toast('Write the entry first');
+      return;
+    }
+    var entry = addLogEntry(typeSel.value, notes, critEl.checked);
+    /* Clear the text and the flag but leave the type where it is — consecutive entries are
+       usually the same kind, and re-picking it every time is friction mid-mission. */
+    textEl.value = '';
+    critEl.checked = false;
+    syncSwitch(critEl);
+    toast('Logged at ' + entry.timestamp);
   });
+
+  document.getElementById('logList').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    var id = btn.getAttribute('data-id');
+    if(btn.getAttribute('data-action') === 'del'){
+      if(!confirm('Delete this log entry? The text is lost and cannot be recovered.')) return;
+      var idx = state.log.findIndex(function(x){ return x.id === id; });
+      if(idx > -1){ state.log.splice(idx,1); scheduleSave(); renderLog(); }
+      return;
+    }
+    if(btn.getAttribute('data-action') === 'edit') openLogEdit(id);
+  });
+
+  var editCrit = document.getElementById('logEditCritical');
+  editCrit.addEventListener('change', function(){ syncSwitch(editCrit); });
+  document.getElementById('logEditClose').addEventListener('click', function(){ closeModal('logEditOverlay'); });
+  document.getElementById('logEditSave').addEventListener('click', function(){
+    var item = state.log.find(function(x){ return x.id === logEditingId; });
+    if(item){
+      item.type = document.getElementById('logEditType').value;
+      item.notes = document.getElementById('logEditText').value.trim();
+      item.critical = editCrit.checked;
+      scheduleSave();
+      renderLog();
+      toast('Entry updated ✔');
+    }
+    logEditingId = null;
+    closeModal('logEditOverlay');
+  });
+
   initQuickLog();
 }
 
@@ -2613,14 +2824,15 @@ var QUICK_LOG_CONFIGS = {
 var currentQuickLogKey = null;
 var currentQuickLogOption = null;
 
+/* Maps a quick-action panel onto a log entry type, so a one-tap entry arrives classified
+   without the user picking anything. */
+var QUICK_LOG_TYPES = {training:'Training', combat:'Combat', nuclear:'Nuclear Authorisation', mission:'Mission'};
+
 function logQuickEntry(text){
-  var n = new Date();
-  var entry = {id:newId(), timestamp: pad2(n.getHours())+':'+pad2(n.getMinutes()), notes:text};
-  state.log.push(entry);
-  scheduleSave();
-  renderLog();
-  revealLogEntry(entry.id, false);
-  toast('Logged ✔');
+  var entry = addLogEntry(QUICK_LOG_TYPES[currentQuickLogKey] || 'General', text, false);
+  /* Names what was logged: the new entry is usually below the fold, so this is the only
+     confirmation the user gets. */
+  toast('Logged ' + text + ' at ' + entry.timestamp);
 }
 
 function openQuickLogPopup(key){
@@ -4158,20 +4370,38 @@ function pdfMedalCard(doc, recipient, medalName, reason){
   pdfCursorY += boxH + 3;
 }
 
-function pdfLogEntry(doc, timestamp, notes){
+function pdfLogEntry(doc, entry){
+  var timestamp = entry.timestamp, notes = entry.notes;
+  var isCrit = !!entry.critical;
+  var type = entry.type && entry.type !== 'General' ? entry.type : '';
   doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(9.5);
   var textX = PDF_MARGIN_L + 22;
   var textW = PDF_CONTENT_W - 22;
+  /* Separator is an em dash, not '·': this line is drawn in Orbitron, whose subset is NARROWER
+     than Exo 2's — U+00B7 and U+00BB are missing from it. An unmapped glyph here doesn't just
+     vanish, it truncates the rest of the run, which silently ate the type name. */
+  var head = (isCrit ? 'CRITICAL' : '') + (isCrit && type ? ' — ' : '') + type;
   var lines = doc.splitTextToSize(pdfText(notes||'—'), textW-2);
   var lineH = 4.4;
-  var boxH = Math.max(9, lines.length*lineH+3);
+  var boxH = Math.max(9, lines.length*lineH+3) + (head ? 4.4 : 0);
   pdfEnsureSpace(doc, boxH+2.5);
-  doc.setFillColor(PDF_NAVY[0],PDF_NAVY[1],PDF_NAVY[2]);
+
+  /* The timestamp chip turns red on a critical entry so it is findable when flicking through
+     the printed report, matching how it reads on screen. */
+  var chip = isCrit ? [178,58,58] : PDF_NAVY;
+  doc.setFillColor(chip[0],chip[1],chip[2]);
   doc.roundedRect(PDF_MARGIN_L, pdfCursorY, 18, 7, 1.2, 1.2, 'F');
   doc.setFont(pdfHeadingFont(),'bold'); doc.setFontSize(8.5); doc.setTextColor(255,255,255);
   doc.text(pdfText(timestamp), PDF_MARGIN_L+9, pdfCursorY+4.8, {align:'center'});
-  doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(9.5); doc.setTextColor(PDF_TEXT[0],PDF_TEXT[1],PDF_TEXT[2]);
+
   var ly = pdfCursorY+4;
+  if(head){
+    doc.setFont(pdfHeadingFont(),'bold'); doc.setFontSize(7.5);
+    if(isCrit) doc.setTextColor(178,58,58); else doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
+    doc.text(head, textX, ly);
+    ly += 4.4;
+  }
+  doc.setFont(pdfBodyFont(),'normal'); doc.setFontSize(9.5); doc.setTextColor(PDF_TEXT[0],PDF_TEXT[1],PDF_TEXT[2]);
   lines.forEach(function(l){ doc.text(l, textX, ly); ly += lineH; });
   pdfCursorY += boxH + 2.5;
 }
@@ -4417,7 +4647,7 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
 
   pdfSectionStart(doc, 'Ongoing Log', tocEntries);
   if(s.log.length){
-    s.log.forEach(function(l){ pdfLogEntry(doc, l.timestamp, l.notes); });
+    s.log.forEach(function(l){ pdfLogEntry(doc, l); });
   } else {
     pdfParagraph(doc, 'No timeline entries recorded.', {italic:true, color:PDF_MUTED});
   }
@@ -4791,7 +5021,7 @@ function initMissionJsonBackup(){
         var parsed = JSON.parse(reader.result);
         var fresh = defaultState();
         for(var k in fresh){ if(parsed.hasOwnProperty(k)) fresh[k] = parsed[k]; }
-        state = migrateEngineeringLogs(migrateRoleNames(fresh));
+        state = migrateLogEntries(migrateEngineeringLogs(migrateRoleNames(fresh)));
         persist();
         renderAll();
         toast('Mission restored ✔');
