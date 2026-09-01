@@ -301,6 +301,14 @@ main{
    So: drop the divider/spacing the other nested sections use to separate themselves from
    content above, and give the toggle card styling matching the .quick-log-btn language it
    reveals — otherwise the muted .nested-toggle default reads as de-emphasised. */
+.eng-import{display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:8px;}
+.eng-src{border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:8px; background:rgba(255,255,255,0.03);}
+.eng-src-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.eng-src-role{font-family:var(--font-display); font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--orange);}
+.eng-src-who{font-size:13px; font-weight:600; color:var(--text); margin-top:2px;}
+.eng-src-meta{font-size:11px; color:var(--muted); margin-top:2px;}
+.eng-src-total{font-size:13px; color:var(--text); padding-top:2px;}
+
 .nested-section.quick-actions{margin-top:0; border-top:none; padding-top:0; margin-bottom:12px;}
 .quick-actions .quick-log-grid{margin:8px 0 0;}
 .nested-toggle.toggle-card{
@@ -1224,16 +1232,44 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         <span class="nested-chevron">▾</span>
       </button>
       <div class="nested-body" id="engLogBody" style="display:none;">
-        <div class="empty-hint" style="margin-top:12px;">Import the Engineer's exported action log (JSON) from the UCN Engineering Reference Tool to include it as its own section in the PDF report.</div>
-        <label class="add-btn" id="btnImportEngLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
-          ⬆ Import Engineering Log (JSON)
-          <input type="file" id="importEngLogInput" accept="application/json,.json" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Engineer's action log (JSON) from the UCN Engineering Reference Tool to include it as its own section in the PDF report. Damage Control and Power Management are often different engineers — import one combined log, or each engineer's separately.</div>
+        <label class="add-btn eng-import" id="engImportLabel_combined">
+          <span class="eng-import-text">⬆ Import Combined Log</span>
+          <input type="file" id="engImportInput_combined" accept="application/json,.json" style="display:none;">
+        </label>
+        <label class="add-btn eng-import" id="engImportLabel_damage">
+          <span class="eng-import-text">⬆ Import Damage Control Log</span>
+          <input type="file" id="engImportInput_damage" accept="application/json,.json" style="display:none;">
+        </label>
+        <label class="add-btn eng-import" id="engImportLabel_power">
+          <span class="eng-import-text">⬆ Import Power Management Log</span>
+          <input type="file" id="engImportInput_power" accept="application/json,.json" style="display:none;">
         </label>
         <div id="engLogSummary" style="display:none; margin-top:12px;">
           <div class="card">
-            <div class="card-head"><span class="card-role">Engineering Log Loaded</span>
-              <button type="button" class="del-x" id="btnRemoveEngLog">✕</button></div>
+            <div class="card-head"><span class="card-role">Engineering Logs Loaded</span></div>
             <div id="engLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nested-section" id="navLogSection">
+      <button type="button" class="nested-toggle" id="navLogToggle" aria-expanded="false" aria-controls="navLogBody">
+        <span>🧭 Navigation Log Import (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="navLogBody" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Navigator's exported waypoint log (JSON) from the UCN Navigation &amp; Radar tool to include it as its own section in the PDF report.</div>
+        <label class="add-btn" id="btnImportNavLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
+          ⬆ Import Navigation Log (JSON)
+          <input type="file" id="importNavLogInput" accept="application/json,.json" style="display:none;">
+        </label>
+        <div id="navLogSummary" style="display:none; margin-top:12px;">
+          <div class="card">
+            <div class="card-head"><span class="card-role">Navigation Log Loaded</span>
+              <button type="button" class="del-x" id="btnRemoveNavLog">✕</button></div>
+            <div id="navLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
           </div>
         </div>
       </div>
@@ -1478,7 +1514,12 @@ function defaultState(){
     promotions: [],
     medals: [],
     commsLog: null,
+    /* Legacy single-log key. Kept in defaults ONLY so loadState()'s merge carries an old
+       saved value through to migrateEngineeringLogs(), which moves it into the array below.
+       Nothing writes to it any more. */
     engineeringLog: null,
+    engineeringLogs: [],
+    navigationLog: null,
     trainingComplete: false
   };
 }
@@ -1500,6 +1541,21 @@ function migrateRoleNames(s){
   return s;
 }
 
+/* Before this, one engineering log was held in state.engineeringLog. Damage Control and Power
+   Management are often two different engineers on the same ship, so logs are now an array with a
+   role each. An existing single log is treated as a combined one, which is what it was. */
+function migrateEngineeringLogs(s){
+  if(!s) return s;
+  if(!Array.isArray(s.engineeringLogs)) s.engineeringLogs = [];
+  if(s.engineeringLog && !s.engineeringLogs.length){
+    var moved = s.engineeringLog;
+    if(!moved.role) moved.role = 'combined';
+    s.engineeringLogs.push(moved);
+  }
+  s.engineeringLog = null;
+  return s;
+}
+
 function loadState(){
   try{
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -1507,7 +1563,7 @@ function loadState(){
     var parsed = JSON.parse(raw);
     var d = defaultState();
     for(var k in d){ if(parsed.hasOwnProperty(k)) d[k] = parsed[k]; }
-    return migrateRoleNames(d);
+    return migrateEngineeringLogs(migrateRoleNames(d));
   }catch(e){ return defaultState(); }
 }
 
@@ -2785,6 +2841,7 @@ function initDebrief(){
 
   initCommsLog();
   initEngineeringLog();
+  initNavigationLog();
 }
 
 /* ================= COMMS LOG IMPORT ================= */
@@ -2883,6 +2940,12 @@ function initCommsLog(){
 
 var ENG_SCHEMA = 'ucn.engineering.log/1';
 
+/* Damage Control and Power Management are frequently two different engineers on the same ship,
+   each exporting their own log. A 'combined' log is one engineer who covered both, so it is
+   mutually exclusive with the other two roles rather than sitting alongside them. */
+var ENG_ROLE_LABELS = {combined:'Combined', damage:'Damage Control', power:'Power Management'};
+var ENG_ROLE_ORDER = ['combined','damage','power'];
+
 /* cellSwap / hull / note are instantaneous events, not repairs. They carry endedAt === startedAt
    and a null durationSeconds, and must never be presented as zero-length repairs. A power cell
    swap in particular is deliberately its own action rather than a repair. */
@@ -2896,20 +2959,21 @@ var ENG_KIND_ORDER = ['ocp','crystal','conduit','reactor','cellSwap','hull','not
 
 function engIsInstant(kind){ return ENG_INSTANT_KINDS.indexOf(kind) !== -1; }
 
-/* Times in the file are ISO 8601 UTC; the log was kept in the operator's local time and is read
-   back in the reader's. new Date() parses the trailing Z correctly, and the getters below are
-   all local, so this converts rather than just reformatting the string. */
-function engParseDate(iso){
+/* Shared by the engineering and navigation imports. Times in those files are ISO 8601 UTC; the
+   log was kept in the operator's local time and is read back in the reader's. new Date() parses
+   the trailing Z correctly, and the getters below are all local, so this converts rather than
+   just reformatting the string. */
+function isoParseDate(iso){
   if(!iso || typeof iso !== 'string') return null;
   var d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
-function engFmtTime(iso){
-  var d = engParseDate(iso);
+function fmtIsoTime(iso){
+  var d = isoParseDate(iso);
   return d ? pad2(d.getHours())+':'+pad2(d.getMinutes()) : '—';
 }
-function engFmtDateTime(iso){
-  var d = engParseDate(iso);
+function fmtIsoDateTime(iso){
+  var d = isoParseDate(iso);
   if(!d) return '—';
   return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());
 }
@@ -2931,7 +2995,7 @@ function engStatusText(e){
 }
 
 /* Throws with a specific message rather than guessing at the shape of an unknown file. */
-function normaliseEngineeringLog(parsed){
+function normaliseEngineeringLog(parsed, role){
   if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
     throw new Error('That file isn\'t a UCN engineering log — it should be a single JSON object.');
   }
@@ -2952,7 +3016,7 @@ function normaliseEngineeringLog(parsed){
   /* Entry ids are only unique within a single file, so they're namespaced on the way in. Only
      one log is held at a time today, but this keeps merging several exports a non-breaking
      change rather than something needing a data migration later. */
-  var stamp = Date.now().toString(36);
+  var stamp = Date.now().toString(36) + '-' + (idCounter++);
 
   var entries = (Array.isArray(parsed.entries) ? parsed.entries : [])
     .filter(function(e){ return e && typeof e === 'object'; })
@@ -2979,7 +3043,7 @@ function normaliseEngineeringLog(parsed){
 
   /* File order isn't guaranteed. */
   entries.sort(function(a,b){
-    var at = engParseDate(a.startedAt), bt = engParseDate(b.startedAt);
+    var at = isoParseDate(a.startedAt), bt = isoParseDate(b.startedAt);
     return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
   });
 
@@ -3000,6 +3064,7 @@ function normaliseEngineeringLog(parsed){
 
   return {
     schema: ENG_SCHEMA,
+    role: (ENG_ROLE_LABELS.hasOwnProperty(role) ? role : 'combined'),
     exportedAt: parsed.exportedAt == null ? null : String(parsed.exportedAt),
     operator: {name: srcOp.name == null ? '' : String(srcOp.name), rank: srcOp.rank == null ? '' : String(srcOp.rank)},
     mission: {
@@ -3022,6 +3087,107 @@ function normaliseEngineeringLog(parsed){
   };
 }
 
+/* Shallow copy that never depends on the source carrying Object.prototype. Rows get copied
+   twice — once when logs are merged, again when conduit groups are marked — so a null-prototype
+   row from the first pass used to blow up e.hasOwnProperty() in the second. */
+function engShallowCopy(o){
+  var out = {};
+  for(var k in o){ if(Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k]; }
+  return out;
+}
+
+/* Who logged an action. Falls back to the role when the engineer left their name blank, which
+   the reference tool's export does by default. */
+function engSourceLabel(log){
+  var n = log.operator && log.operator.name ? log.operator.name.trim() : '';
+  return n || ENG_ROLE_LABELS[log.role] || 'Engineer';
+}
+
+/* Folds one or two imported logs into the single view the summary card and the PDF render from.
+   Each entry keeps a sourceLabel so a merged timeline can still say who did what. */
+function mergeEngineeringLogs(logs){
+  logs = (logs || []).filter(function(l){ return l && Array.isArray(l.entries); });
+  if(!logs.length) return null;
+
+  var entries = [];
+  logs.forEach(function(log){
+    var label = engSourceLabel(log);
+    log.entries.forEach(function(e){
+      var row = engShallowCopy(e);
+      row.sourceLabel = label;
+      row.sourceRole = log.role;
+      entries.push(row);
+    });
+  });
+  /* One chronological mission timeline, not two lists stapled together. Entry ids are namespaced
+     per import, so ids from different logs cannot collide here. */
+  entries.sort(function(a,b){
+    var at = isoParseDate(a.startedAt), bt = isoParseDate(b.startedAt);
+    return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
+  });
+
+  var totals = {};
+  ENG_KIND_ORDER.forEach(function(k){ totals[k] = 0; });
+  entries.forEach(function(e){ if(totals.hasOwnProperty(e.kind)) totals[e.kind]++; });
+
+  /* Both engineers may take hull readings, so the series is the union of theirs, in time order.
+     Identical (time, value) pairs are dropped as the same reading recorded twice. */
+  var readings = [], seenReading = {};
+  logs.forEach(function(log){
+    (log.hull.readings || []).forEach(function(r){
+      var key = r.at + '|' + r.value;
+      if(seenReading[key]) return;
+      seenReading[key] = true;
+      readings.push(r);
+    });
+  });
+  readings.sort(function(a,b){
+    var at = isoParseDate(a.at), bt = isoParseDate(b.at);
+    return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
+  });
+  var last = readings.length ? readings[readings.length-1] : null;
+
+  /* OCP spares come from the Damage Control log only. OCP repairs are Damage Control's job, so
+     the Power Management export carries an untouched copy of the same locker figure — counting
+     both would double the starting stock. Falls back to a combined log, then to whatever exists. */
+  var sparesLog = null;
+  ['damage','combined'].forEach(function(role){
+    if(sparesLog) return;
+    sparesLog = logs.filter(function(l){ return l.role === role && l.spares.start != null; })[0] || null;
+  });
+  if(!sparesLog) sparesLog = logs.filter(function(l){ return l.spares.start != null; })[0] || null;
+
+  function firstNonEmpty(get){
+    for(var i=0;i<logs.length;i++){ var v = get(logs[i]); if(v) return v; }
+    return '';
+  }
+
+  return {
+    sources: logs.map(function(l){ return {role:l.role, label:engSourceLabel(l), rank:(l.operator&&l.operator.rank)||'', entries:l.entries.length, exportedAt:l.exportedAt}; }),
+    multiSource: logs.length > 1,
+    operators: logs.map(engSourceLabel),
+    mission: {name: firstNonEmpty(function(l){ return l.mission.name; }), type: firstNonEmpty(function(l){ return l.mission.type; })},
+    ship: {id: firstNonEmpty(function(l){ return l.ship.id; }), name: firstNonEmpty(function(l){ return l.ship.name; })},
+    /* A section counts as in use if either engineer had it on. */
+    modules: {
+      power: logs.some(function(l){ return l.modules.power; }),
+      damage: logs.some(function(l){ return l.modules.damage; })
+    },
+    spares: sparesLog ? sparesLog.spares : {start:null, remaining:null, used:null},
+    hull: {latest: last ? last.value : null, latestAt: last ? last.at : null, readings: readings},
+    exportedAt: firstNonEmpty(function(l){ return l.exportedAt; }),
+    totals: totals,
+    entries: entries
+  };
+}
+
+/* True when two logs disagree about which ship they were taken on — worth telling the user, since
+   locations differ between hulls and one of the two exports is then mismatched. */
+function engShipConflict(logs){
+  var ids = (logs||[]).map(function(l){ return l.ship.id; }).filter(Boolean);
+  return ids.length > 1 && ids.some(function(id){ return id !== ids[0]; });
+}
+
 /* Conduit failures arrive in groups: several sharing an identical startedAt were logged as one
    action. They are ANNOTATED as a group rather than merged into a single row, because merging
    them means the row can only carry one member's location and duration — and on a real log the
@@ -3041,8 +3207,7 @@ function markEngConduitGroups(entries){
   });
   var seen = {};
   return entries.map(function(e){
-    var row = Object.create(null);
-    for(var k in e){ if(e.hasOwnProperty(k)) row[k] = e[k]; }
+    var row = engShallowCopy(e);
     if(e.kind === 'conduit'){
       var key = e.startedAt || '';
       row.groupSize = counts[key];
@@ -3058,7 +3223,7 @@ function markEngConduitGroups(entries){
 /* The shared timestamp is the grouping signal, so it prints once on the first member of a group
    and is left blank on the continuation rows. */
 function engTimeCell(e){
-  return (e.kind === 'conduit' && e.groupIndex > 0) ? '' : engFmtTime(e.startedAt);
+  return (e.kind === 'conduit' && e.groupIndex > 0) ? '' : fmtIsoTime(e.startedAt);
 }
 
 /* The first row of a conduit group announces how many failed together; the rest are marked as
@@ -3087,44 +3252,87 @@ function renderEngLogSummary(){
   var wrap = document.getElementById('engLogSummary');
   var text = document.getElementById('engLogSummaryText');
   if(!wrap || !text) return;
-  var log = state.engineeringLog;
-  if(!log){ wrap.style.display = 'none'; return; }
+  var logs = state.engineeringLogs || [];
+  if(!logs.length){ wrap.style.display = 'none'; return; }
+  var merged = mergeEngineeringLogs(logs);
+
+  var html = '';
+
+  /* One card per imported log so each can be removed on its own, rather than an all-or-nothing
+     clear when two engineers are loaded. */
+  logs.forEach(function(log){
+    var bits = [];
+    if(log.operator.rank) bits.push(escHtml(log.operator.rank));
+    bits.push(escHtml(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies')));
+    if(log.exportedAt) bits.push('exported ' + escHtml(fmtIsoDateTime(log.exportedAt)));
+    html += '<div class="eng-src">' +
+      '<div class="eng-src-head">' +
+        '<span class="eng-src-role">' + escHtml(ENG_ROLE_LABELS[log.role] || 'Log') + '</span>' +
+        '<button type="button" class="del-x" data-action="eng-remove" data-role="' + escAttr(log.role) + '">✕</button>' +
+      '</div>' +
+      '<div class="eng-src-who">' + escHtml(engSourceLabel(log)) + '</div>' +
+      '<div class="eng-src-meta">' + bits.join(' · ') + '</div>' +
+    '</div>';
+  });
 
   var parts = [];
-  if(log.operator.name) parts.push('Engineer: ' + log.operator.name + (log.operator.rank ? ' (' + log.operator.rank + ')' : ''));
-  if(log.mission.name) parts.push('Mission: ' + log.mission.name + (log.mission.type ? ' — ' + log.mission.type : ''));
-  if(log.ship.name) parts.push('Ship: ' + log.ship.name);
+  if(engShipConflict(logs)){
+    parts.push('⚠️ These logs were taken on different ships — check you imported the right pair.');
+  }
+  if(merged.mission.name) parts.push('Mission: ' + merged.mission.name + (merged.mission.type ? ' — ' + merged.mission.type : ''));
+  if(merged.ship.name) parts.push('Ship: ' + merged.ship.name);
 
-  /* A false module means that section was switched off, not that it saw no activity — so it's
-     reported as "off" rather than as an absence of entries. */
+  /* A false module means that section was switched off, not that it saw no activity. With two
+     logs it is off only if neither engineer had it on. */
   var off = [];
-  if(!log.modules.power) off.push('Power');
-  if(!log.modules.damage) off.push('Damage Control');
+  if(!merged.modules.power) off.push('Power');
+  if(!merged.modules.damage) off.push('Damage Control');
   if(off.length) parts.push('Modules off: ' + off.join(', '));
 
-  if(log.spares.start != null && log.spares.remaining != null){
-    parts.push('OCP spares: ' + log.spares.remaining + ' of ' + log.spares.start + ' left (' + log.spares.used + ' used)');
+  if(merged.spares.start != null && merged.spares.remaining != null){
+    parts.push('OCP spares: ' + merged.spares.remaining + ' of ' + merged.spares.start + ' left (' + merged.spares.used + ' used)');
   }
-  if(log.hull.latest != null){
-    parts.push('Hull: ' + log.hull.latest + '% at ' + engFmtTime(log.hull.latestAt) +
-      (log.hull.readings.length > 1 ? ' (' + log.hull.readings.length + ' readings)' : ''));
+  if(merged.hull.latest != null){
+    parts.push('Hull: ' + merged.hull.latest + '% at ' + fmtIsoTime(merged.hull.latestAt) +
+      (merged.hull.readings.length > 1 ? ' (' + merged.hull.readings.length + ' readings)' : ''));
   }
 
   var counts = ENG_KIND_ORDER
-    .filter(function(k){ return log.totals[k]; })
-    .map(function(k){ return log.totals[k] + ' × ' + ENG_KIND_LABELS[k]; });
-  parts.push(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies') + (counts.length ? ' — ' + counts.join(', ') : ''));
+    .filter(function(k){ return merged.totals[k]; })
+    .map(function(k){ return merged.totals[k] + ' × ' + ENG_KIND_LABELS[k]; });
+  parts.push(merged.entries.length + ' entr' + (merged.entries.length===1?'y':'ies') +
+    (logs.length > 1 ? ' combined' : '') + (counts.length ? ' — ' + counts.join(', ') : ''));
 
-  var running = engRunningCount(log);
+  var running = engRunningCount(merged);
   if(running) parts.push(running + ' repair' + (running===1?'':'s') + ' still running at export');
 
   /* escHtml on every part: operator, mission and note text are all untrusted file input. */
-  text.innerHTML = parts.map(function(p){ return escHtml(p); }).join('<br>');
+  html += '<div class="eng-src-total">' + parts.map(function(x){ return escHtml(x); }).join('<br>') + '</div>';
+  text.innerHTML = html;
   wrap.style.display = '';
+}
+
+/* Which import buttons make sense right now. A combined log covers both roles, so it can't sit
+   alongside a single-role log — offering all three regardless would let the user build a state
+   where the same work is counted twice. */
+function syncEngImportButtons(){
+  var logs = state.engineeringLogs || [];
+  var hasCombined = logs.some(function(l){ return l.role === 'combined'; });
+  var hasSplit = logs.some(function(l){ return l.role !== 'combined'; });
+  ENG_ROLE_ORDER.forEach(function(role){
+    var el = document.getElementById('engImportLabel_' + role);
+    if(!el) return;
+    var loaded = logs.some(function(l){ return l.role === role; });
+    var blocked = (role === 'combined') ? hasSplit : hasCombined;
+    el.style.display = blocked ? 'none' : '';
+    el.querySelector('.eng-import-text').textContent =
+      (loaded ? 'Replace ' : '⬆ Import ') + ENG_ROLE_LABELS[role] + ' Log';
+  });
 }
 
 function initEngineeringLog(){
   renderEngLogSummary();
+  syncEngImportButtons();
 
   var toggle = document.getElementById('engLogToggle');
   var body = document.getElementById('engLogBody');
@@ -3135,45 +3343,285 @@ function initEngineeringLog(){
     toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 
-  document.getElementById('importEngLogInput').addEventListener('change', function(e){
+  ENG_ROLE_ORDER.forEach(function(role){
+    var input = document.getElementById('engImportInput_' + role);
+    if(!input) return;
+    input.addEventListener('change', function(e){
+      var file = e.target.files && e.target.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        var normalised;
+        try{
+          normalised = normaliseEngineeringLog(JSON.parse(reader.result), role);
+        }catch(err){
+          /* SyntaxError means the file wasn't JSON at all; anything else is our own schema
+             message, which already says exactly what was wrong. */
+          alert(err instanceof SyntaxError
+            ? 'Could not read that file — it isn\'t valid JSON.'
+            : err.message);
+          e.target.value = '';
+          return;
+        }
+        var logs = state.engineeringLogs || [];
+        var existingIdx = -1;
+        for(var i=0;i<logs.length;i++){ if(logs[i].role === role) existingIdx = i; }
+        if(existingIdx > -1 && !confirm('A ' + ENG_ROLE_LABELS[role] + ' log is already loaded. Replace it with this one?')){
+          e.target.value = '';
+          return;
+        }
+        if(existingIdx > -1) logs.splice(existingIdx, 1, normalised);
+        else logs.push(normalised);
+        /* Keep a stable Combined / Damage Control / Power Management order in the summary,
+           independent of which was imported first. */
+        logs.sort(function(a,b){ return ENG_ROLE_ORDER.indexOf(a.role) - ENG_ROLE_ORDER.indexOf(b.role); });
+        state.engineeringLogs = logs;
+        if(!persist()){
+          /* persist() reports quota failures loudly; a large log is the likely cause here. */
+          toast('Log imported but could not be saved — storage is full ⚠️');
+        } else {
+          toast(ENG_ROLE_LABELS[role] + ' log imported ✔');
+        }
+        renderEngLogSummary();
+        syncEngImportButtons();
+        e.target.value = '';
+      };
+      reader.readAsText(file);
+    });
+  });
+
+  /* Delegated: the per-log remove buttons are re-rendered on every change. */
+  document.getElementById('engLogSummaryText').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-action="eng-remove"]');
+    if(!btn) return;
+    var role = btn.getAttribute('data-role');
+    if(!confirm('Remove the ' + (ENG_ROLE_LABELS[role] || '') + ' log? It will no longer appear in the PDF export.')) return;
+    state.engineeringLogs = (state.engineeringLogs || []).filter(function(l){ return l.role !== role; });
+    scheduleSave();
+    renderEngLogSummary();
+    syncEngImportButtons();
+  });
+}
+
+/* ================= NAVIGATION LOG IMPORT ================= */
+/* Imports an export from the UCN Navigation & Radar tool. One log at a time, a summary card
+   here, full detail grouped by category in the PDF. */
+
+/* The six category keys the tool writes. Anything else is dropped on import — an unrecognised
+   category has no meaning to render. NOTE: the 'mission' CATEGORY is unrelated to the top-level
+   'mission' OBJECT in the same file; they share a word and nothing else. */
+var NAV_CATEGORIES = ['nav','hazard','objective','hostile','unknown','mission'];
+var NAV_CATEGORY_LABELS = {
+  nav:'Navigation / Course Plotting',
+  hazard:'Hazards',
+  objective:'Objectives',
+  hostile:'Hostiles / Hostile Area',
+  unknown:'Unknown / Suspect / Investigate',
+  mission:'Mission Objectives'
+};
+var NAV_MISSION_KEYS = ['date','time','name','type','navigator','rank','ship'];
+
+/* Matches the exporting tool: numbers become strings, anything else non-string becomes ''. */
+function navStr(v){
+  if(typeof v === 'string') return v.trim();
+  if(typeof v === 'number' && isFinite(v)) return String(v);
+  return '';
+}
+
+/* Keeps an ISO timestamp only if it actually parses; anything unreadable becomes null rather
+   than being carried through as a string that would later render as garbage. */
+function navIsoOrNull(v){
+  if(typeof v !== 'string' || !v) return null;
+  return isoParseDate(v) ? v : null;
+}
+
+/* "number" is a label, not an integer, but has to sort the way a navigator reads it: 2 before
+   10, and 01 alongside 1. Compares digit runs numerically and everything else as text, so
+   "3a" and "3b" still order sensibly. */
+function navCompareNumbers(a, b){
+  var re = /(\d+|\D+)/g;
+  var ax = String(a||'').toLowerCase().match(re) || [];
+  var bx = String(b||'').toLowerCase().match(re) || [];
+  for(var i=0; i<Math.max(ax.length, bx.length); i++){
+    var av = ax[i], bv = bx[i];
+    if(av === undefined) return -1;
+    if(bv === undefined) return 1;
+    var an = parseInt(av,10), bn = parseInt(bv,10);
+    if(!isNaN(an) && !isNaN(bn)){
+      if(an !== bn) return an - bn;
+    } else if(av !== bv){
+      return av < bv ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+/* Accepts every shape the tool has ever written:
+     v0  a bare ARRAY of waypoints, no wrapper at all
+     v1/v2  {version, waypoints} with no mission block
+     v3  {version, mission, waypoints}
+   so an old file opens rather than being rejected for missing keys it never had. */
+function normaliseNavigationLog(parsed){
+  var version, rawWaypoints, rawMission;
+
+  if(Array.isArray(parsed)){
+    version = 0;
+    rawWaypoints = parsed;
+    rawMission = null;
+  } else if(parsed && typeof parsed === 'object'){
+    if(!Array.isArray(parsed.waypoints)){
+      throw new Error('That file has no "waypoints" list, so it isn\'t a UCN navigation export.');
+    }
+    version = typeof parsed.version === 'number' ? parsed.version : null;
+    rawWaypoints = parsed.waypoints;
+    rawMission = (parsed.mission && typeof parsed.mission === 'object' && !Array.isArray(parsed.mission)) ? parsed.mission : null;
+  } else {
+    throw new Error('That file isn\'t a UCN navigation export — expected a JSON object or array.');
+  }
+
+  var mission = {};
+  NAV_MISSION_KEYS.forEach(function(k){ mission[k] = rawMission ? navStr(rawMission[k]) : ''; });
+
+  var seenIds = {};
+  var dropped = 0;
+  var waypoints = [];
+
+  rawWaypoints.forEach(function(w){
+    if(!w || typeof w !== 'object' || Array.isArray(w)){ dropped++; return; }
+    var category = navStr(w.category);
+    if(NAV_CATEGORIES.indexOf(category) === -1){ dropped++; return; }
+    var number = navStr(w.number);
+    var title = navStr(w.title);
+    /* number and title are the only required fields; without them the row can't be identified
+       or read, so the tool drops the entry rather than rendering a blank line. */
+    if(!number || !title){ dropped++; return; }
+
+    /* Ids are unique within a file but regenerated on collision, exactly as the tool does, so a
+       duplicated id never silently swallows the second copy. */
+    var id = navStr(w.id);
+    if(!id || seenIds[id]) id = 'wp_' + Date.now().toString(36) + '_' + (idCounter++).toString(36);
+    seenIds[id] = true;
+
+    waypoints.push({
+      id: id,
+      category: category,
+      number: number,
+      title: title,
+      sector: navStr(w.sector),
+      description: navStr(w.description),
+      createdAt: navIsoOrNull(w.createdAt),
+      /* completedAt is the ONLY thing that marks a waypoint complete — there is no status field.
+         outcome text can legitimately be present on a still-active waypoint, so it is never
+         used to infer completion. */
+      completedAt: navIsoOrNull(w.completedAt),
+      outcome: navStr(w.outcome)
+    });
+  });
+
+  var counts = {};
+  NAV_CATEGORIES.forEach(function(c){ counts[c] = 0; });
+  waypoints.forEach(function(w){ counts[w.category]++; });
+
+  return {
+    version: version,
+    mission: mission,
+    waypoints: waypoints,
+    counts: counts,
+    completed: waypoints.filter(function(w){ return w.completedAt; }).length,
+    dropped: dropped
+  };
+}
+
+/* Waypoints for one category, in the order a navigator reads them. */
+function navByCategory(log, category){
+  return log.waypoints
+    .filter(function(w){ return w.category === category; })
+    .sort(function(a,b){ return navCompareNumbers(a.number, b.number); });
+}
+
+function navStatusText(w){
+  return w.completedAt ? ('Complete ' + fmtIsoTime(w.completedAt)) : 'Active';
+}
+
+function renderNavLogSummary(){
+  var wrap = document.getElementById('navLogSummary');
+  var text = document.getElementById('navLogSummaryText');
+  if(!wrap || !text) return;
+  var log = state.navigationLog;
+  if(!log){ wrap.style.display = 'none'; return; }
+
+  var parts = [];
+  var m = log.mission;
+  if(m.navigator) parts.push('Navigator: ' + m.navigator + (m.rank ? ' (' + m.rank + ')' : ''));
+  if(m.name) parts.push('Mission: ' + m.name + (m.type ? ' — ' + m.type : ''));
+  if(m.ship) parts.push('Ship: ' + m.ship);
+  if(m.date || m.time) parts.push('Logged: ' + [m.date, m.time].filter(Boolean).join(' '));
+
+  var counts = NAV_CATEGORIES
+    .filter(function(c){ return log.counts[c]; })
+    .map(function(c){ return log.counts[c] + ' × ' + NAV_CATEGORY_LABELS[c]; });
+  var active = log.waypoints.length - log.completed;
+  parts.push(log.waypoints.length + ' waypoint' + (log.waypoints.length===1?'':'s') +
+    ' — ' + log.completed + ' complete, ' + active + ' active');
+  if(counts.length) parts.push(counts.join(', '));
+  if(log.dropped){
+    parts.push('⚠️ ' + log.dropped + ' entr' + (log.dropped===1?'y':'ies') + ' skipped (unrecognised category, or missing number/title)');
+  }
+
+  /* escHtml on every part: mission names, navigator and waypoint text are all untrusted file
+     input and are treated as data, never as markup or instructions. */
+  text.innerHTML = parts.map(function(x){ return escHtml(x); }).join('<br>');
+  wrap.style.display = '';
+}
+
+function initNavigationLog(){
+  renderNavLogSummary();
+
+  var toggle = document.getElementById('navLogToggle');
+  var body = document.getElementById('navLogBody');
+  toggle.addEventListener('click', function(){
+    var isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : '';
+    toggle.classList.toggle('open', !isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  });
+
+  document.getElementById('importNavLogInput').addEventListener('change', function(e){
     var file = e.target.files && e.target.files[0];
     if(!file) return;
     var reader = new FileReader();
     reader.onload = function(){
       var normalised;
       try{
-        normalised = normaliseEngineeringLog(JSON.parse(reader.result));
+        normalised = normaliseNavigationLog(JSON.parse(reader.result));
       }catch(err){
-        /* SyntaxError means the file wasn't JSON at all; anything else is our own schema
-           message, which already says exactly what was wrong. */
         alert(err instanceof SyntaxError
           ? 'Could not read that file — it isn\'t valid JSON.'
           : err.message);
         e.target.value = '';
         return;
       }
-      if(state.engineeringLog && !confirm('An engineering log is already loaded. Replace it with this one?')){
+      if(state.navigationLog && !confirm('A navigation log is already loaded. Replace it with this one?')){
         e.target.value = '';
         return;
       }
-      state.engineeringLog = normalised;
+      state.navigationLog = normalised;
       if(!persist()){
-        /* persist() reports quota failures loudly; a large log is the likely cause here. */
         toast('Log imported but could not be saved — storage is full ⚠️');
       } else {
-        toast('Engineering log imported ✔');
+        toast('Navigation log imported ✔');
       }
-      renderEngLogSummary();
+      renderNavLogSummary();
       e.target.value = '';
     };
     reader.readAsText(file);
   });
 
-  document.getElementById('btnRemoveEngLog').addEventListener('click', function(){
-    if(!confirm('Remove the imported engineering log? It will no longer appear in the PDF export.')) return;
-    state.engineeringLog = null;
+  document.getElementById('btnRemoveNavLog').addEventListener('click', function(){
+    if(!confirm('Remove the imported navigation log? It will no longer appear in the PDF export.')) return;
+    state.navigationLog = null;
     scheduleSave();
-    renderEngLogSummary();
+    renderNavLogSummary();
   });
 }
 
@@ -3239,6 +3687,7 @@ function renderAll(){
   renderPromotions(); renderMedals();
   renderCommsLogSummary();
   renderEngLogSummary();
+  renderNavLogSummary();
   updateQuickLogButtonsVisibility();
 }
 
@@ -3790,8 +4239,8 @@ function pdfHullChart(doc, readings){
 
   /* Label only the ends: one reading per point would overlap badly on a busy mission. */
   doc.setFontSize(7); doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
-  doc.text(engFmtTime(readings[0].at), x0, y0 + plotH + 5);
-  doc.text(engFmtTime(readings[readings.length-1].at), x0 + w, y0 + plotH + 5, {align:'right'});
+  doc.text(fmtIsoTime(readings[0].at), x0, y0 + plotH + 5);
+  doc.text(fmtIsoTime(readings[readings.length-1].at), x0 + w, y0 + plotH + 5, {align:'right'});
   pdfCursorY += chartH + 6;
 }
 
@@ -3983,12 +4432,16 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     }
   }
 
-  if(s.engineeringLog && s.engineeringLog.entries){
-    var eng = s.engineeringLog;
+  if(s.engineeringLogs && s.engineeringLogs.length){
+    var eng = mergeEngineeringLogs(s.engineeringLogs);
     pdfSectionStart(doc, 'Engineering Log', tocEntries);
 
     var engMeta = [];
-    if(eng.operator.name) engMeta.push(['ENGINEER', eng.operator.name + (eng.operator.rank ? ' (' + eng.operator.rank + ')' : '')]);
+    /* One row per engineer, so a two-person mission names both rather than collapsing them. */
+    eng.sources.forEach(function(src){
+      engMeta.push([src.role === 'combined' ? 'ENGINEER' : ENG_ROLE_LABELS[src.role].toUpperCase(),
+                    src.label + (src.rank ? ' (' + src.rank + ')' : '')]);
+    });
     if(eng.mission.name) engMeta.push(['MISSION', eng.mission.name + (eng.mission.type ? ' — ' + eng.mission.type : '')]);
     if(eng.ship.name) engMeta.push(['SHIP', eng.ship.name]);
     if(eng.spares.start != null && eng.spares.remaining != null){
@@ -4001,7 +4454,7 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(modsOff.length) engMeta.push(['MODULES OFF', modsOff.join(', ')]);
     /* Provenance: worth having even when the operator left their name and mission blank,
        which is exactly when the rest of this table is nearly empty. */
-    if(eng.exportedAt) engMeta.push(['EXPORTED', engFmtDateTime(eng.exportedAt)]);
+    if(eng.exportedAt) engMeta.push(['EXPORTED', fmtIsoDateTime(eng.exportedAt)]);
     if(engMeta.length){
       pdfTable(doc, ['Field','Value'], engMeta, [42, PDF_CONTENT_W-42]);
     }
@@ -4009,20 +4462,33 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(eng.hull.readings.length > 1){
       pdfSubHeading(doc, 'Hull Integrity');
       pdfHullChart(doc, eng.hull.readings);
-      pdfParagraph(doc, 'Latest reading ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) +
+      pdfParagraph(doc, 'Latest reading ' + eng.hull.latest + '% at ' + fmtIsoDateTime(eng.hull.latestAt) +
         ' — ' + eng.hull.readings.length + ' readings taken.', {color:PDF_MUTED});
     } else if(eng.hull.latest != null){
       /* A single point can't be plotted, so it's stated instead of drawn. */
       pdfSubHeading(doc, 'Hull Integrity');
-      pdfParagraph(doc, 'Single reading: ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) + '.');
+      pdfParagraph(doc, 'Single reading: ' + eng.hull.latest + '% at ' + fmtIsoDateTime(eng.hull.latestAt) + '.');
     }
 
     pdfSubHeading(doc, 'Actions');
+    /* Both engineers' actions run as one chronological timeline. The extra "Logged By" column
+       only appears when there is more than one source — with a single log it would be a column
+       of the same name repeated down the page, and the width is better spent on Location. */
+    var engMulti = eng.multiSource;
     var engRows = markEngConduitGroups(eng.entries).map(function(e){
-      return [engTimeCell(e), engActionLabel(e), engTargetLabel(e), e.location || '—', engStatusText(e)];
+      var row = [engTimeCell(e), engActionLabel(e), engTargetLabel(e), e.location || '—'];
+      if(engMulti) row.push(e.sourceLabel || '—');
+      row.push(engStatusText(e));
+      return row;
     });
     if(engRows.length){
-      pdfTable(doc, ['Time','Action','Target','Location','Duration'], engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
+      if(engMulti){
+        pdfTable(doc, ['Time','Action','Target','Location','Logged By','Duration'],
+          engRows, [14, 28, 22, PDF_CONTENT_W-14-28-22-30-26, 30, 26]);
+      } else {
+        pdfTable(doc, ['Time','Action','Target','Location','Duration'],
+          engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
+      }
     } else {
       pdfParagraph(doc, 'No engineering actions recorded.', {italic:true, color:PDF_MUTED});
     }
@@ -4032,8 +4498,58 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     var engNotes = eng.entries.filter(function(e){ return e.kind === 'note' && e.note; });
     if(engNotes.length){
       pdfSubHeading(doc, 'Engineer\'s Notes');
-      engNotes.forEach(function(e){ pdfBlockNote(doc, engFmtTime(e.startedAt), e.note); });
+      engNotes.forEach(function(e){
+        pdfBlockNote(doc, fmtIsoTime(e.startedAt) + (engMulti ? ' — ' + (e.sourceLabel || '') : ''), e.note);
+      });
     }
+  }
+
+  if(s.navigationLog && s.navigationLog.waypoints){
+    var nav = s.navigationLog;
+    pdfSectionStart(doc, 'Navigation Log', tocEntries);
+
+    var navMeta = [];
+    var nm = nav.mission;
+    if(nm.navigator) navMeta.push(['NAVIGATOR', nm.navigator + (nm.rank ? ' (' + nm.rank + ')' : '')]);
+    if(nm.ship) navMeta.push(['SHIP', nm.ship]);
+    if(nm.name) navMeta.push(['MISSION', nm.name + (nm.type ? ' — ' + nm.type : '')]);
+    if(nm.date || nm.time) navMeta.push(['LOGGED', [nm.date, nm.time].filter(Boolean).join(' ')]);
+    var navActive = nav.waypoints.length - nav.completed;
+    navMeta.push(['WAYPOINTS', nav.waypoints.length + ' total — ' + nav.completed + ' complete, ' + navActive + ' active']);
+    pdfTable(doc, ['Field','Value'], navMeta, [42, PDF_CONTENT_W-42]);
+
+    if(nav.dropped){
+      /* Say so rather than quietly reporting fewer waypoints than the file contained. */
+      pdfParagraph(doc, nav.dropped + ' entr' + (nav.dropped===1?'y was':'ies were') +
+        ' skipped on import (unrecognised category, or missing number/title).', {italic:true, color:PDF_MUTED});
+    }
+
+    if(!nav.waypoints.length){
+      pdfParagraph(doc, 'No waypoints recorded.', {italic:true, color:PDF_MUTED});
+    }
+
+    /* One subsection per category, in the tool's own order, skipping categories with nothing in
+       them. Within a category waypoints run by number, numeric-aware so 2 precedes 10. */
+    NAV_CATEGORIES.forEach(function(cat){
+      var list = navByCategory(nav, cat);
+      if(!list.length) return;
+      pdfSubHeading(doc, NAV_CATEGORY_LABELS[cat]);
+      pdfTable(doc, ['No.','Title','Sector','Logged','Status'],
+        list.map(function(w){
+          return [w.number, w.title, w.sector || '—', fmtIsoTime(w.createdAt), navStatusText(w)];
+        }),
+        [14, 74, 26, 26, PDF_CONTENT_W-14-74-26-26]);
+
+      /* Description and outcome are the substance of a waypoint and would be truncated to
+         nothing in a table cell, so they get block notes. Outcome can be present on a waypoint
+         that is still active, which is legitimate and shown as-is. */
+      list.forEach(function(w){
+        if(!w.description && !w.outcome) return;
+        var body = w.description;
+        if(w.outcome) body = (body ? body + '\n' : '') + 'Outcome: ' + w.outcome;
+        pdfBlockNote(doc, w.number + ' · ' + w.title, body);
+      });
+    });
   }
 
   pdfSectionStart(doc, 'Mission Outcome', tocEntries);
@@ -4275,7 +4791,7 @@ function initMissionJsonBackup(){
         var parsed = JSON.parse(reader.result);
         var fresh = defaultState();
         for(var k in fresh){ if(parsed.hasOwnProperty(k)) fresh[k] = parsed[k]; }
-        state = migrateRoleNames(fresh);
+        state = migrateEngineeringLogs(migrateRoleNames(fresh));
         persist();
         renderAll();
         toast('Mission restored ✔');
