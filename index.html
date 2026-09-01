@@ -301,6 +301,14 @@ main{
    So: drop the divider/spacing the other nested sections use to separate themselves from
    content above, and give the toggle card styling matching the .quick-log-btn language it
    reveals — otherwise the muted .nested-toggle default reads as de-emphasised. */
+.eng-import{display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:8px;}
+.eng-src{border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:8px; background:rgba(255,255,255,0.03);}
+.eng-src-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.eng-src-role{font-family:var(--font-display); font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--orange);}
+.eng-src-who{font-size:13px; font-weight:600; color:var(--text); margin-top:2px;}
+.eng-src-meta{font-size:11px; color:var(--muted); margin-top:2px;}
+.eng-src-total{font-size:13px; color:var(--text); padding-top:2px;}
+
 .nested-section.quick-actions{margin-top:0; border-top:none; padding-top:0; margin-bottom:12px;}
 .quick-actions .quick-log-grid{margin:8px 0 0;}
 .nested-toggle.toggle-card{
@@ -1224,15 +1232,22 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         <span class="nested-chevron">▾</span>
       </button>
       <div class="nested-body" id="engLogBody" style="display:none;">
-        <div class="empty-hint" style="margin-top:12px;">Import the Engineer's exported action log (JSON) from the UCN Engineering Reference Tool to include it as its own section in the PDF report.</div>
-        <label class="add-btn" id="btnImportEngLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
-          ⬆ Import Engineering Log (JSON)
-          <input type="file" id="importEngLogInput" accept="application/json,.json" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Engineer's action log (JSON) from the UCN Engineering Reference Tool to include it as its own section in the PDF report. Damage Control and Power Management are often different engineers — import one combined log, or each engineer's separately.</div>
+        <label class="add-btn eng-import" id="engImportLabel_combined">
+          <span class="eng-import-text">⬆ Import Combined Log</span>
+          <input type="file" id="engImportInput_combined" accept="application/json,.json" style="display:none;">
+        </label>
+        <label class="add-btn eng-import" id="engImportLabel_damage">
+          <span class="eng-import-text">⬆ Import Damage Control Log</span>
+          <input type="file" id="engImportInput_damage" accept="application/json,.json" style="display:none;">
+        </label>
+        <label class="add-btn eng-import" id="engImportLabel_power">
+          <span class="eng-import-text">⬆ Import Power Management Log</span>
+          <input type="file" id="engImportInput_power" accept="application/json,.json" style="display:none;">
         </label>
         <div id="engLogSummary" style="display:none; margin-top:12px;">
           <div class="card">
-            <div class="card-head"><span class="card-role">Engineering Log Loaded</span>
-              <button type="button" class="del-x" id="btnRemoveEngLog">✕</button></div>
+            <div class="card-head"><span class="card-role">Engineering Logs Loaded</span></div>
             <div id="engLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
           </div>
         </div>
@@ -1478,7 +1493,11 @@ function defaultState(){
     promotions: [],
     medals: [],
     commsLog: null,
+    /* Legacy single-log key. Kept in defaults ONLY so loadState()'s merge carries an old
+       saved value through to migrateEngineeringLogs(), which moves it into the array below.
+       Nothing writes to it any more. */
     engineeringLog: null,
+    engineeringLogs: [],
     trainingComplete: false
   };
 }
@@ -1500,6 +1519,21 @@ function migrateRoleNames(s){
   return s;
 }
 
+/* Before this, one engineering log was held in state.engineeringLog. Damage Control and Power
+   Management are often two different engineers on the same ship, so logs are now an array with a
+   role each. An existing single log is treated as a combined one, which is what it was. */
+function migrateEngineeringLogs(s){
+  if(!s) return s;
+  if(!Array.isArray(s.engineeringLogs)) s.engineeringLogs = [];
+  if(s.engineeringLog && !s.engineeringLogs.length){
+    var moved = s.engineeringLog;
+    if(!moved.role) moved.role = 'combined';
+    s.engineeringLogs.push(moved);
+  }
+  s.engineeringLog = null;
+  return s;
+}
+
 function loadState(){
   try{
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -1507,7 +1541,7 @@ function loadState(){
     var parsed = JSON.parse(raw);
     var d = defaultState();
     for(var k in d){ if(parsed.hasOwnProperty(k)) d[k] = parsed[k]; }
-    return migrateRoleNames(d);
+    return migrateEngineeringLogs(migrateRoleNames(d));
   }catch(e){ return defaultState(); }
 }
 
@@ -2883,6 +2917,12 @@ function initCommsLog(){
 
 var ENG_SCHEMA = 'ucn.engineering.log/1';
 
+/* Damage Control and Power Management are frequently two different engineers on the same ship,
+   each exporting their own log. A 'combined' log is one engineer who covered both, so it is
+   mutually exclusive with the other two roles rather than sitting alongside them. */
+var ENG_ROLE_LABELS = {combined:'Combined', damage:'Damage Control', power:'Power Management'};
+var ENG_ROLE_ORDER = ['combined','damage','power'];
+
 /* cellSwap / hull / note are instantaneous events, not repairs. They carry endedAt === startedAt
    and a null durationSeconds, and must never be presented as zero-length repairs. A power cell
    swap in particular is deliberately its own action rather than a repair. */
@@ -2931,7 +2971,7 @@ function engStatusText(e){
 }
 
 /* Throws with a specific message rather than guessing at the shape of an unknown file. */
-function normaliseEngineeringLog(parsed){
+function normaliseEngineeringLog(parsed, role){
   if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
     throw new Error('That file isn\'t a UCN engineering log — it should be a single JSON object.');
   }
@@ -2952,7 +2992,7 @@ function normaliseEngineeringLog(parsed){
   /* Entry ids are only unique within a single file, so they're namespaced on the way in. Only
      one log is held at a time today, but this keeps merging several exports a non-breaking
      change rather than something needing a data migration later. */
-  var stamp = Date.now().toString(36);
+  var stamp = Date.now().toString(36) + '-' + (idCounter++);
 
   var entries = (Array.isArray(parsed.entries) ? parsed.entries : [])
     .filter(function(e){ return e && typeof e === 'object'; })
@@ -3000,6 +3040,7 @@ function normaliseEngineeringLog(parsed){
 
   return {
     schema: ENG_SCHEMA,
+    role: (ENG_ROLE_LABELS.hasOwnProperty(role) ? role : 'combined'),
     exportedAt: parsed.exportedAt == null ? null : String(parsed.exportedAt),
     operator: {name: srcOp.name == null ? '' : String(srcOp.name), rank: srcOp.rank == null ? '' : String(srcOp.rank)},
     mission: {
@@ -3022,6 +3063,107 @@ function normaliseEngineeringLog(parsed){
   };
 }
 
+/* Shallow copy that never depends on the source carrying Object.prototype. Rows get copied
+   twice — once when logs are merged, again when conduit groups are marked — so a null-prototype
+   row from the first pass used to blow up e.hasOwnProperty() in the second. */
+function engShallowCopy(o){
+  var out = {};
+  for(var k in o){ if(Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k]; }
+  return out;
+}
+
+/* Who logged an action. Falls back to the role when the engineer left their name blank, which
+   the reference tool's export does by default. */
+function engSourceLabel(log){
+  var n = log.operator && log.operator.name ? log.operator.name.trim() : '';
+  return n || ENG_ROLE_LABELS[log.role] || 'Engineer';
+}
+
+/* Folds one or two imported logs into the single view the summary card and the PDF render from.
+   Each entry keeps a sourceLabel so a merged timeline can still say who did what. */
+function mergeEngineeringLogs(logs){
+  logs = (logs || []).filter(function(l){ return l && Array.isArray(l.entries); });
+  if(!logs.length) return null;
+
+  var entries = [];
+  logs.forEach(function(log){
+    var label = engSourceLabel(log);
+    log.entries.forEach(function(e){
+      var row = engShallowCopy(e);
+      row.sourceLabel = label;
+      row.sourceRole = log.role;
+      entries.push(row);
+    });
+  });
+  /* One chronological mission timeline, not two lists stapled together. Entry ids are namespaced
+     per import, so ids from different logs cannot collide here. */
+  entries.sort(function(a,b){
+    var at = engParseDate(a.startedAt), bt = engParseDate(b.startedAt);
+    return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
+  });
+
+  var totals = {};
+  ENG_KIND_ORDER.forEach(function(k){ totals[k] = 0; });
+  entries.forEach(function(e){ if(totals.hasOwnProperty(e.kind)) totals[e.kind]++; });
+
+  /* Both engineers may take hull readings, so the series is the union of theirs, in time order.
+     Identical (time, value) pairs are dropped as the same reading recorded twice. */
+  var readings = [], seenReading = {};
+  logs.forEach(function(log){
+    (log.hull.readings || []).forEach(function(r){
+      var key = r.at + '|' + r.value;
+      if(seenReading[key]) return;
+      seenReading[key] = true;
+      readings.push(r);
+    });
+  });
+  readings.sort(function(a,b){
+    var at = engParseDate(a.at), bt = engParseDate(b.at);
+    return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
+  });
+  var last = readings.length ? readings[readings.length-1] : null;
+
+  /* OCP spares come from the Damage Control log only. OCP repairs are Damage Control's job, so
+     the Power Management export carries an untouched copy of the same locker figure — counting
+     both would double the starting stock. Falls back to a combined log, then to whatever exists. */
+  var sparesLog = null;
+  ['damage','combined'].forEach(function(role){
+    if(sparesLog) return;
+    sparesLog = logs.filter(function(l){ return l.role === role && l.spares.start != null; })[0] || null;
+  });
+  if(!sparesLog) sparesLog = logs.filter(function(l){ return l.spares.start != null; })[0] || null;
+
+  function firstNonEmpty(get){
+    for(var i=0;i<logs.length;i++){ var v = get(logs[i]); if(v) return v; }
+    return '';
+  }
+
+  return {
+    sources: logs.map(function(l){ return {role:l.role, label:engSourceLabel(l), rank:(l.operator&&l.operator.rank)||'', entries:l.entries.length, exportedAt:l.exportedAt}; }),
+    multiSource: logs.length > 1,
+    operators: logs.map(engSourceLabel),
+    mission: {name: firstNonEmpty(function(l){ return l.mission.name; }), type: firstNonEmpty(function(l){ return l.mission.type; })},
+    ship: {id: firstNonEmpty(function(l){ return l.ship.id; }), name: firstNonEmpty(function(l){ return l.ship.name; })},
+    /* A section counts as in use if either engineer had it on. */
+    modules: {
+      power: logs.some(function(l){ return l.modules.power; }),
+      damage: logs.some(function(l){ return l.modules.damage; })
+    },
+    spares: sparesLog ? sparesLog.spares : {start:null, remaining:null, used:null},
+    hull: {latest: last ? last.value : null, latestAt: last ? last.at : null, readings: readings},
+    exportedAt: firstNonEmpty(function(l){ return l.exportedAt; }),
+    totals: totals,
+    entries: entries
+  };
+}
+
+/* True when two logs disagree about which ship they were taken on — worth telling the user, since
+   locations differ between hulls and one of the two exports is then mismatched. */
+function engShipConflict(logs){
+  var ids = (logs||[]).map(function(l){ return l.ship.id; }).filter(Boolean);
+  return ids.length > 1 && ids.some(function(id){ return id !== ids[0]; });
+}
+
 /* Conduit failures arrive in groups: several sharing an identical startedAt were logged as one
    action. They are ANNOTATED as a group rather than merged into a single row, because merging
    them means the row can only carry one member's location and duration — and on a real log the
@@ -3041,8 +3183,7 @@ function markEngConduitGroups(entries){
   });
   var seen = {};
   return entries.map(function(e){
-    var row = Object.create(null);
-    for(var k in e){ if(e.hasOwnProperty(k)) row[k] = e[k]; }
+    var row = engShallowCopy(e);
     if(e.kind === 'conduit'){
       var key = e.startedAt || '';
       row.groupSize = counts[key];
@@ -3087,44 +3228,87 @@ function renderEngLogSummary(){
   var wrap = document.getElementById('engLogSummary');
   var text = document.getElementById('engLogSummaryText');
   if(!wrap || !text) return;
-  var log = state.engineeringLog;
-  if(!log){ wrap.style.display = 'none'; return; }
+  var logs = state.engineeringLogs || [];
+  if(!logs.length){ wrap.style.display = 'none'; return; }
+  var merged = mergeEngineeringLogs(logs);
+
+  var html = '';
+
+  /* One card per imported log so each can be removed on its own, rather than an all-or-nothing
+     clear when two engineers are loaded. */
+  logs.forEach(function(log){
+    var bits = [];
+    if(log.operator.rank) bits.push(escHtml(log.operator.rank));
+    bits.push(escHtml(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies')));
+    if(log.exportedAt) bits.push('exported ' + escHtml(engFmtDateTime(log.exportedAt)));
+    html += '<div class="eng-src">' +
+      '<div class="eng-src-head">' +
+        '<span class="eng-src-role">' + escHtml(ENG_ROLE_LABELS[log.role] || 'Log') + '</span>' +
+        '<button type="button" class="del-x" data-action="eng-remove" data-role="' + escAttr(log.role) + '">✕</button>' +
+      '</div>' +
+      '<div class="eng-src-who">' + escHtml(engSourceLabel(log)) + '</div>' +
+      '<div class="eng-src-meta">' + bits.join(' · ') + '</div>' +
+    '</div>';
+  });
 
   var parts = [];
-  if(log.operator.name) parts.push('Engineer: ' + log.operator.name + (log.operator.rank ? ' (' + log.operator.rank + ')' : ''));
-  if(log.mission.name) parts.push('Mission: ' + log.mission.name + (log.mission.type ? ' — ' + log.mission.type : ''));
-  if(log.ship.name) parts.push('Ship: ' + log.ship.name);
+  if(engShipConflict(logs)){
+    parts.push('⚠️ These logs were taken on different ships — check you imported the right pair.');
+  }
+  if(merged.mission.name) parts.push('Mission: ' + merged.mission.name + (merged.mission.type ? ' — ' + merged.mission.type : ''));
+  if(merged.ship.name) parts.push('Ship: ' + merged.ship.name);
 
-  /* A false module means that section was switched off, not that it saw no activity — so it's
-     reported as "off" rather than as an absence of entries. */
+  /* A false module means that section was switched off, not that it saw no activity. With two
+     logs it is off only if neither engineer had it on. */
   var off = [];
-  if(!log.modules.power) off.push('Power');
-  if(!log.modules.damage) off.push('Damage Control');
+  if(!merged.modules.power) off.push('Power');
+  if(!merged.modules.damage) off.push('Damage Control');
   if(off.length) parts.push('Modules off: ' + off.join(', '));
 
-  if(log.spares.start != null && log.spares.remaining != null){
-    parts.push('OCP spares: ' + log.spares.remaining + ' of ' + log.spares.start + ' left (' + log.spares.used + ' used)');
+  if(merged.spares.start != null && merged.spares.remaining != null){
+    parts.push('OCP spares: ' + merged.spares.remaining + ' of ' + merged.spares.start + ' left (' + merged.spares.used + ' used)');
   }
-  if(log.hull.latest != null){
-    parts.push('Hull: ' + log.hull.latest + '% at ' + engFmtTime(log.hull.latestAt) +
-      (log.hull.readings.length > 1 ? ' (' + log.hull.readings.length + ' readings)' : ''));
+  if(merged.hull.latest != null){
+    parts.push('Hull: ' + merged.hull.latest + '% at ' + engFmtTime(merged.hull.latestAt) +
+      (merged.hull.readings.length > 1 ? ' (' + merged.hull.readings.length + ' readings)' : ''));
   }
 
   var counts = ENG_KIND_ORDER
-    .filter(function(k){ return log.totals[k]; })
-    .map(function(k){ return log.totals[k] + ' × ' + ENG_KIND_LABELS[k]; });
-  parts.push(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies') + (counts.length ? ' — ' + counts.join(', ') : ''));
+    .filter(function(k){ return merged.totals[k]; })
+    .map(function(k){ return merged.totals[k] + ' × ' + ENG_KIND_LABELS[k]; });
+  parts.push(merged.entries.length + ' entr' + (merged.entries.length===1?'y':'ies') +
+    (logs.length > 1 ? ' combined' : '') + (counts.length ? ' — ' + counts.join(', ') : ''));
 
-  var running = engRunningCount(log);
+  var running = engRunningCount(merged);
   if(running) parts.push(running + ' repair' + (running===1?'':'s') + ' still running at export');
 
   /* escHtml on every part: operator, mission and note text are all untrusted file input. */
-  text.innerHTML = parts.map(function(p){ return escHtml(p); }).join('<br>');
+  html += '<div class="eng-src-total">' + parts.map(function(x){ return escHtml(x); }).join('<br>') + '</div>';
+  text.innerHTML = html;
   wrap.style.display = '';
+}
+
+/* Which import buttons make sense right now. A combined log covers both roles, so it can't sit
+   alongside a single-role log — offering all three regardless would let the user build a state
+   where the same work is counted twice. */
+function syncEngImportButtons(){
+  var logs = state.engineeringLogs || [];
+  var hasCombined = logs.some(function(l){ return l.role === 'combined'; });
+  var hasSplit = logs.some(function(l){ return l.role !== 'combined'; });
+  ENG_ROLE_ORDER.forEach(function(role){
+    var el = document.getElementById('engImportLabel_' + role);
+    if(!el) return;
+    var loaded = logs.some(function(l){ return l.role === role; });
+    var blocked = (role === 'combined') ? hasSplit : hasCombined;
+    el.style.display = blocked ? 'none' : '';
+    el.querySelector('.eng-import-text').textContent =
+      (loaded ? 'Replace ' : '⬆ Import ') + ENG_ROLE_LABELS[role] + ' Log';
+  });
 }
 
 function initEngineeringLog(){
   renderEngLogSummary();
+  syncEngImportButtons();
 
   var toggle = document.getElementById('engLogToggle');
   var body = document.getElementById('engLogBody');
@@ -3135,45 +3319,63 @@ function initEngineeringLog(){
     toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   });
 
-  document.getElementById('importEngLogInput').addEventListener('change', function(e){
-    var file = e.target.files && e.target.files[0];
-    if(!file) return;
-    var reader = new FileReader();
-    reader.onload = function(){
-      var normalised;
-      try{
-        normalised = normaliseEngineeringLog(JSON.parse(reader.result));
-      }catch(err){
-        /* SyntaxError means the file wasn't JSON at all; anything else is our own schema
-           message, which already says exactly what was wrong. */
-        alert(err instanceof SyntaxError
-          ? 'Could not read that file — it isn\'t valid JSON.'
-          : err.message);
+  ENG_ROLE_ORDER.forEach(function(role){
+    var input = document.getElementById('engImportInput_' + role);
+    if(!input) return;
+    input.addEventListener('change', function(e){
+      var file = e.target.files && e.target.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        var normalised;
+        try{
+          normalised = normaliseEngineeringLog(JSON.parse(reader.result), role);
+        }catch(err){
+          /* SyntaxError means the file wasn't JSON at all; anything else is our own schema
+             message, which already says exactly what was wrong. */
+          alert(err instanceof SyntaxError
+            ? 'Could not read that file — it isn\'t valid JSON.'
+            : err.message);
+          e.target.value = '';
+          return;
+        }
+        var logs = state.engineeringLogs || [];
+        var existingIdx = -1;
+        for(var i=0;i<logs.length;i++){ if(logs[i].role === role) existingIdx = i; }
+        if(existingIdx > -1 && !confirm('A ' + ENG_ROLE_LABELS[role] + ' log is already loaded. Replace it with this one?')){
+          e.target.value = '';
+          return;
+        }
+        if(existingIdx > -1) logs.splice(existingIdx, 1, normalised);
+        else logs.push(normalised);
+        /* Keep a stable Combined / Damage Control / Power Management order in the summary,
+           independent of which was imported first. */
+        logs.sort(function(a,b){ return ENG_ROLE_ORDER.indexOf(a.role) - ENG_ROLE_ORDER.indexOf(b.role); });
+        state.engineeringLogs = logs;
+        if(!persist()){
+          /* persist() reports quota failures loudly; a large log is the likely cause here. */
+          toast('Log imported but could not be saved — storage is full ⚠️');
+        } else {
+          toast(ENG_ROLE_LABELS[role] + ' log imported ✔');
+        }
+        renderEngLogSummary();
+        syncEngImportButtons();
         e.target.value = '';
-        return;
-      }
-      if(state.engineeringLog && !confirm('An engineering log is already loaded. Replace it with this one?')){
-        e.target.value = '';
-        return;
-      }
-      state.engineeringLog = normalised;
-      if(!persist()){
-        /* persist() reports quota failures loudly; a large log is the likely cause here. */
-        toast('Log imported but could not be saved — storage is full ⚠️');
-      } else {
-        toast('Engineering log imported ✔');
-      }
-      renderEngLogSummary();
-      e.target.value = '';
-    };
-    reader.readAsText(file);
+      };
+      reader.readAsText(file);
+    });
   });
 
-  document.getElementById('btnRemoveEngLog').addEventListener('click', function(){
-    if(!confirm('Remove the imported engineering log? It will no longer appear in the PDF export.')) return;
-    state.engineeringLog = null;
+  /* Delegated: the per-log remove buttons are re-rendered on every change. */
+  document.getElementById('engLogSummaryText').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-action="eng-remove"]');
+    if(!btn) return;
+    var role = btn.getAttribute('data-role');
+    if(!confirm('Remove the ' + (ENG_ROLE_LABELS[role] || '') + ' log? It will no longer appear in the PDF export.')) return;
+    state.engineeringLogs = (state.engineeringLogs || []).filter(function(l){ return l.role !== role; });
     scheduleSave();
     renderEngLogSummary();
+    syncEngImportButtons();
   });
 }
 
@@ -3983,12 +4185,16 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     }
   }
 
-  if(s.engineeringLog && s.engineeringLog.entries){
-    var eng = s.engineeringLog;
+  if(s.engineeringLogs && s.engineeringLogs.length){
+    var eng = mergeEngineeringLogs(s.engineeringLogs);
     pdfSectionStart(doc, 'Engineering Log', tocEntries);
 
     var engMeta = [];
-    if(eng.operator.name) engMeta.push(['ENGINEER', eng.operator.name + (eng.operator.rank ? ' (' + eng.operator.rank + ')' : '')]);
+    /* One row per engineer, so a two-person mission names both rather than collapsing them. */
+    eng.sources.forEach(function(src){
+      engMeta.push([src.role === 'combined' ? 'ENGINEER' : ENG_ROLE_LABELS[src.role].toUpperCase(),
+                    src.label + (src.rank ? ' (' + src.rank + ')' : '')]);
+    });
     if(eng.mission.name) engMeta.push(['MISSION', eng.mission.name + (eng.mission.type ? ' — ' + eng.mission.type : '')]);
     if(eng.ship.name) engMeta.push(['SHIP', eng.ship.name]);
     if(eng.spares.start != null && eng.spares.remaining != null){
@@ -4018,11 +4224,24 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     }
 
     pdfSubHeading(doc, 'Actions');
+    /* Both engineers' actions run as one chronological timeline. The extra "Logged By" column
+       only appears when there is more than one source — with a single log it would be a column
+       of the same name repeated down the page, and the width is better spent on Location. */
+    var engMulti = eng.multiSource;
     var engRows = markEngConduitGroups(eng.entries).map(function(e){
-      return [engTimeCell(e), engActionLabel(e), engTargetLabel(e), e.location || '—', engStatusText(e)];
+      var row = [engTimeCell(e), engActionLabel(e), engTargetLabel(e), e.location || '—'];
+      if(engMulti) row.push(e.sourceLabel || '—');
+      row.push(engStatusText(e));
+      return row;
     });
     if(engRows.length){
-      pdfTable(doc, ['Time','Action','Target','Location','Duration'], engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
+      if(engMulti){
+        pdfTable(doc, ['Time','Action','Target','Location','Logged By','Duration'],
+          engRows, [14, 28, 22, PDF_CONTENT_W-14-28-22-30-26, 30, 26]);
+      } else {
+        pdfTable(doc, ['Time','Action','Target','Location','Duration'],
+          engRows, [16, 34, 30, PDF_CONTENT_W-16-34-30-26, 26]);
+      }
     } else {
       pdfParagraph(doc, 'No engineering actions recorded.', {italic:true, color:PDF_MUTED});
     }
@@ -4032,7 +4251,9 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     var engNotes = eng.entries.filter(function(e){ return e.kind === 'note' && e.note; });
     if(engNotes.length){
       pdfSubHeading(doc, 'Engineer\'s Notes');
-      engNotes.forEach(function(e){ pdfBlockNote(doc, engFmtTime(e.startedAt), e.note); });
+      engNotes.forEach(function(e){
+        pdfBlockNote(doc, engFmtTime(e.startedAt) + (engMulti ? ' — ' + (e.sourceLabel || '') : ''), e.note);
+      });
     }
   }
 
@@ -4275,7 +4496,7 @@ function initMissionJsonBackup(){
         var parsed = JSON.parse(reader.result);
         var fresh = defaultState();
         for(var k in fresh){ if(parsed.hasOwnProperty(k)) fresh[k] = parsed[k]; }
-        state = migrateRoleNames(fresh);
+        state = migrateEngineeringLogs(migrateRoleNames(fresh));
         persist();
         renderAll();
         toast('Mission restored ✔');
