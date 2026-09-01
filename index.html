@@ -1253,6 +1253,27 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         </div>
       </div>
     </div>
+
+    <div class="nested-section" id="navLogSection">
+      <button type="button" class="nested-toggle" id="navLogToggle" aria-expanded="false" aria-controls="navLogBody">
+        <span>🧭 Navigation Log Import (optional)</span>
+        <span class="nested-chevron">▾</span>
+      </button>
+      <div class="nested-body" id="navLogBody" style="display:none;">
+        <div class="empty-hint" style="margin-top:12px;">Import the Navigator's exported waypoint log (JSON) from the UCN Navigation &amp; Radar tool to include it as its own section in the PDF report.</div>
+        <label class="add-btn" id="btnImportNavLogLabel" style="display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:10px;">
+          ⬆ Import Navigation Log (JSON)
+          <input type="file" id="importNavLogInput" accept="application/json,.json" style="display:none;">
+        </label>
+        <div id="navLogSummary" style="display:none; margin-top:12px;">
+          <div class="card">
+            <div class="card-head"><span class="card-role">Navigation Log Loaded</span>
+              <button type="button" class="del-x" id="btnRemoveNavLog">✕</button></div>
+            <div id="navLogSummaryText" style="font-size:13px; color:var(--text); padding:0 2px 4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -1498,6 +1519,7 @@ function defaultState(){
        Nothing writes to it any more. */
     engineeringLog: null,
     engineeringLogs: [],
+    navigationLog: null,
     trainingComplete: false
   };
 }
@@ -2819,6 +2841,7 @@ function initDebrief(){
 
   initCommsLog();
   initEngineeringLog();
+  initNavigationLog();
 }
 
 /* ================= COMMS LOG IMPORT ================= */
@@ -2936,20 +2959,21 @@ var ENG_KIND_ORDER = ['ocp','crystal','conduit','reactor','cellSwap','hull','not
 
 function engIsInstant(kind){ return ENG_INSTANT_KINDS.indexOf(kind) !== -1; }
 
-/* Times in the file are ISO 8601 UTC; the log was kept in the operator's local time and is read
-   back in the reader's. new Date() parses the trailing Z correctly, and the getters below are
-   all local, so this converts rather than just reformatting the string. */
-function engParseDate(iso){
+/* Shared by the engineering and navigation imports. Times in those files are ISO 8601 UTC; the
+   log was kept in the operator's local time and is read back in the reader's. new Date() parses
+   the trailing Z correctly, and the getters below are all local, so this converts rather than
+   just reformatting the string. */
+function isoParseDate(iso){
   if(!iso || typeof iso !== 'string') return null;
   var d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
-function engFmtTime(iso){
-  var d = engParseDate(iso);
+function fmtIsoTime(iso){
+  var d = isoParseDate(iso);
   return d ? pad2(d.getHours())+':'+pad2(d.getMinutes()) : '—';
 }
-function engFmtDateTime(iso){
-  var d = engParseDate(iso);
+function fmtIsoDateTime(iso){
+  var d = isoParseDate(iso);
   if(!d) return '—';
   return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());
 }
@@ -3019,7 +3043,7 @@ function normaliseEngineeringLog(parsed, role){
 
   /* File order isn't guaranteed. */
   entries.sort(function(a,b){
-    var at = engParseDate(a.startedAt), bt = engParseDate(b.startedAt);
+    var at = isoParseDate(a.startedAt), bt = isoParseDate(b.startedAt);
     return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
   });
 
@@ -3098,7 +3122,7 @@ function mergeEngineeringLogs(logs){
   /* One chronological mission timeline, not two lists stapled together. Entry ids are namespaced
      per import, so ids from different logs cannot collide here. */
   entries.sort(function(a,b){
-    var at = engParseDate(a.startedAt), bt = engParseDate(b.startedAt);
+    var at = isoParseDate(a.startedAt), bt = isoParseDate(b.startedAt);
     return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
   });
 
@@ -3118,7 +3142,7 @@ function mergeEngineeringLogs(logs){
     });
   });
   readings.sort(function(a,b){
-    var at = engParseDate(a.at), bt = engParseDate(b.at);
+    var at = isoParseDate(a.at), bt = isoParseDate(b.at);
     return (at ? at.getTime() : 0) - (bt ? bt.getTime() : 0);
   });
   var last = readings.length ? readings[readings.length-1] : null;
@@ -3199,7 +3223,7 @@ function markEngConduitGroups(entries){
 /* The shared timestamp is the grouping signal, so it prints once on the first member of a group
    and is left blank on the continuation rows. */
 function engTimeCell(e){
-  return (e.kind === 'conduit' && e.groupIndex > 0) ? '' : engFmtTime(e.startedAt);
+  return (e.kind === 'conduit' && e.groupIndex > 0) ? '' : fmtIsoTime(e.startedAt);
 }
 
 /* The first row of a conduit group announces how many failed together; the rest are marked as
@@ -3240,7 +3264,7 @@ function renderEngLogSummary(){
     var bits = [];
     if(log.operator.rank) bits.push(escHtml(log.operator.rank));
     bits.push(escHtml(log.entries.length + ' entr' + (log.entries.length===1?'y':'ies')));
-    if(log.exportedAt) bits.push('exported ' + escHtml(engFmtDateTime(log.exportedAt)));
+    if(log.exportedAt) bits.push('exported ' + escHtml(fmtIsoDateTime(log.exportedAt)));
     html += '<div class="eng-src">' +
       '<div class="eng-src-head">' +
         '<span class="eng-src-role">' + escHtml(ENG_ROLE_LABELS[log.role] || 'Log') + '</span>' +
@@ -3269,7 +3293,7 @@ function renderEngLogSummary(){
     parts.push('OCP spares: ' + merged.spares.remaining + ' of ' + merged.spares.start + ' left (' + merged.spares.used + ' used)');
   }
   if(merged.hull.latest != null){
-    parts.push('Hull: ' + merged.hull.latest + '% at ' + engFmtTime(merged.hull.latestAt) +
+    parts.push('Hull: ' + merged.hull.latest + '% at ' + fmtIsoTime(merged.hull.latestAt) +
       (merged.hull.readings.length > 1 ? ' (' + merged.hull.readings.length + ' readings)' : ''));
   }
 
@@ -3379,6 +3403,228 @@ function initEngineeringLog(){
   });
 }
 
+/* ================= NAVIGATION LOG IMPORT ================= */
+/* Imports an export from the UCN Navigation & Radar tool. One log at a time, a summary card
+   here, full detail grouped by category in the PDF. */
+
+/* The six category keys the tool writes. Anything else is dropped on import — an unrecognised
+   category has no meaning to render. NOTE: the 'mission' CATEGORY is unrelated to the top-level
+   'mission' OBJECT in the same file; they share a word and nothing else. */
+var NAV_CATEGORIES = ['nav','hazard','objective','hostile','unknown','mission'];
+var NAV_CATEGORY_LABELS = {
+  nav:'Navigation / Course Plotting',
+  hazard:'Hazards',
+  objective:'Objectives',
+  hostile:'Hostiles / Hostile Area',
+  unknown:'Unknown / Suspect / Investigate',
+  mission:'Mission Objectives'
+};
+var NAV_MISSION_KEYS = ['date','time','name','type','navigator','rank','ship'];
+
+/* Matches the exporting tool: numbers become strings, anything else non-string becomes ''. */
+function navStr(v){
+  if(typeof v === 'string') return v.trim();
+  if(typeof v === 'number' && isFinite(v)) return String(v);
+  return '';
+}
+
+/* Keeps an ISO timestamp only if it actually parses; anything unreadable becomes null rather
+   than being carried through as a string that would later render as garbage. */
+function navIsoOrNull(v){
+  if(typeof v !== 'string' || !v) return null;
+  return isoParseDate(v) ? v : null;
+}
+
+/* "number" is a label, not an integer, but has to sort the way a navigator reads it: 2 before
+   10, and 01 alongside 1. Compares digit runs numerically and everything else as text, so
+   "3a" and "3b" still order sensibly. */
+function navCompareNumbers(a, b){
+  var re = /(\d+|\D+)/g;
+  var ax = String(a||'').toLowerCase().match(re) || [];
+  var bx = String(b||'').toLowerCase().match(re) || [];
+  for(var i=0; i<Math.max(ax.length, bx.length); i++){
+    var av = ax[i], bv = bx[i];
+    if(av === undefined) return -1;
+    if(bv === undefined) return 1;
+    var an = parseInt(av,10), bn = parseInt(bv,10);
+    if(!isNaN(an) && !isNaN(bn)){
+      if(an !== bn) return an - bn;
+    } else if(av !== bv){
+      return av < bv ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+/* Accepts every shape the tool has ever written:
+     v0  a bare ARRAY of waypoints, no wrapper at all
+     v1/v2  {version, waypoints} with no mission block
+     v3  {version, mission, waypoints}
+   so an old file opens rather than being rejected for missing keys it never had. */
+function normaliseNavigationLog(parsed){
+  var version, rawWaypoints, rawMission;
+
+  if(Array.isArray(parsed)){
+    version = 0;
+    rawWaypoints = parsed;
+    rawMission = null;
+  } else if(parsed && typeof parsed === 'object'){
+    if(!Array.isArray(parsed.waypoints)){
+      throw new Error('That file has no "waypoints" list, so it isn\'t a UCN navigation export.');
+    }
+    version = typeof parsed.version === 'number' ? parsed.version : null;
+    rawWaypoints = parsed.waypoints;
+    rawMission = (parsed.mission && typeof parsed.mission === 'object' && !Array.isArray(parsed.mission)) ? parsed.mission : null;
+  } else {
+    throw new Error('That file isn\'t a UCN navigation export — expected a JSON object or array.');
+  }
+
+  var mission = {};
+  NAV_MISSION_KEYS.forEach(function(k){ mission[k] = rawMission ? navStr(rawMission[k]) : ''; });
+
+  var seenIds = {};
+  var dropped = 0;
+  var waypoints = [];
+
+  rawWaypoints.forEach(function(w){
+    if(!w || typeof w !== 'object' || Array.isArray(w)){ dropped++; return; }
+    var category = navStr(w.category);
+    if(NAV_CATEGORIES.indexOf(category) === -1){ dropped++; return; }
+    var number = navStr(w.number);
+    var title = navStr(w.title);
+    /* number and title are the only required fields; without them the row can't be identified
+       or read, so the tool drops the entry rather than rendering a blank line. */
+    if(!number || !title){ dropped++; return; }
+
+    /* Ids are unique within a file but regenerated on collision, exactly as the tool does, so a
+       duplicated id never silently swallows the second copy. */
+    var id = navStr(w.id);
+    if(!id || seenIds[id]) id = 'wp_' + Date.now().toString(36) + '_' + (idCounter++).toString(36);
+    seenIds[id] = true;
+
+    waypoints.push({
+      id: id,
+      category: category,
+      number: number,
+      title: title,
+      sector: navStr(w.sector),
+      description: navStr(w.description),
+      createdAt: navIsoOrNull(w.createdAt),
+      /* completedAt is the ONLY thing that marks a waypoint complete — there is no status field.
+         outcome text can legitimately be present on a still-active waypoint, so it is never
+         used to infer completion. */
+      completedAt: navIsoOrNull(w.completedAt),
+      outcome: navStr(w.outcome)
+    });
+  });
+
+  var counts = {};
+  NAV_CATEGORIES.forEach(function(c){ counts[c] = 0; });
+  waypoints.forEach(function(w){ counts[w.category]++; });
+
+  return {
+    version: version,
+    mission: mission,
+    waypoints: waypoints,
+    counts: counts,
+    completed: waypoints.filter(function(w){ return w.completedAt; }).length,
+    dropped: dropped
+  };
+}
+
+/* Waypoints for one category, in the order a navigator reads them. */
+function navByCategory(log, category){
+  return log.waypoints
+    .filter(function(w){ return w.category === category; })
+    .sort(function(a,b){ return navCompareNumbers(a.number, b.number); });
+}
+
+function navStatusText(w){
+  return w.completedAt ? ('Complete ' + fmtIsoTime(w.completedAt)) : 'Active';
+}
+
+function renderNavLogSummary(){
+  var wrap = document.getElementById('navLogSummary');
+  var text = document.getElementById('navLogSummaryText');
+  if(!wrap || !text) return;
+  var log = state.navigationLog;
+  if(!log){ wrap.style.display = 'none'; return; }
+
+  var parts = [];
+  var m = log.mission;
+  if(m.navigator) parts.push('Navigator: ' + m.navigator + (m.rank ? ' (' + m.rank + ')' : ''));
+  if(m.name) parts.push('Mission: ' + m.name + (m.type ? ' — ' + m.type : ''));
+  if(m.ship) parts.push('Ship: ' + m.ship);
+  if(m.date || m.time) parts.push('Logged: ' + [m.date, m.time].filter(Boolean).join(' '));
+
+  var counts = NAV_CATEGORIES
+    .filter(function(c){ return log.counts[c]; })
+    .map(function(c){ return log.counts[c] + ' × ' + NAV_CATEGORY_LABELS[c]; });
+  var active = log.waypoints.length - log.completed;
+  parts.push(log.waypoints.length + ' waypoint' + (log.waypoints.length===1?'':'s') +
+    ' — ' + log.completed + ' complete, ' + active + ' active');
+  if(counts.length) parts.push(counts.join(', '));
+  if(log.dropped){
+    parts.push('⚠️ ' + log.dropped + ' entr' + (log.dropped===1?'y':'ies') + ' skipped (unrecognised category, or missing number/title)');
+  }
+
+  /* escHtml on every part: mission names, navigator and waypoint text are all untrusted file
+     input and are treated as data, never as markup or instructions. */
+  text.innerHTML = parts.map(function(x){ return escHtml(x); }).join('<br>');
+  wrap.style.display = '';
+}
+
+function initNavigationLog(){
+  renderNavLogSummary();
+
+  var toggle = document.getElementById('navLogToggle');
+  var body = document.getElementById('navLogBody');
+  toggle.addEventListener('click', function(){
+    var isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : '';
+    toggle.classList.toggle('open', !isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  });
+
+  document.getElementById('importNavLogInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var normalised;
+      try{
+        normalised = normaliseNavigationLog(JSON.parse(reader.result));
+      }catch(err){
+        alert(err instanceof SyntaxError
+          ? 'Could not read that file — it isn\'t valid JSON.'
+          : err.message);
+        e.target.value = '';
+        return;
+      }
+      if(state.navigationLog && !confirm('A navigation log is already loaded. Replace it with this one?')){
+        e.target.value = '';
+        return;
+      }
+      state.navigationLog = normalised;
+      if(!persist()){
+        toast('Log imported but could not be saved — storage is full ⚠️');
+      } else {
+        toast('Navigation log imported ✔');
+      }
+      renderNavLogSummary();
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('btnRemoveNavLog').addEventListener('click', function(){
+    if(!confirm('Remove the imported navigation log? It will no longer appear in the PDF export.')) return;
+    state.navigationLog = null;
+    scheduleSave();
+    renderNavLogSummary();
+  });
+}
+
 /* ================= UTIL: ESCAPING ================= */
 function escHtml(s){
   return (s==null?'':String(s)).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
@@ -3441,6 +3687,7 @@ function renderAll(){
   renderPromotions(); renderMedals();
   renderCommsLogSummary();
   renderEngLogSummary();
+  renderNavLogSummary();
   updateQuickLogButtonsVisibility();
 }
 
@@ -3992,8 +4239,8 @@ function pdfHullChart(doc, readings){
 
   /* Label only the ends: one reading per point would overlap badly on a busy mission. */
   doc.setFontSize(7); doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
-  doc.text(engFmtTime(readings[0].at), x0, y0 + plotH + 5);
-  doc.text(engFmtTime(readings[readings.length-1].at), x0 + w, y0 + plotH + 5, {align:'right'});
+  doc.text(fmtIsoTime(readings[0].at), x0, y0 + plotH + 5);
+  doc.text(fmtIsoTime(readings[readings.length-1].at), x0 + w, y0 + plotH + 5, {align:'right'});
   pdfCursorY += chartH + 6;
 }
 
@@ -4207,7 +4454,7 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(modsOff.length) engMeta.push(['MODULES OFF', modsOff.join(', ')]);
     /* Provenance: worth having even when the operator left their name and mission blank,
        which is exactly when the rest of this table is nearly empty. */
-    if(eng.exportedAt) engMeta.push(['EXPORTED', engFmtDateTime(eng.exportedAt)]);
+    if(eng.exportedAt) engMeta.push(['EXPORTED', fmtIsoDateTime(eng.exportedAt)]);
     if(engMeta.length){
       pdfTable(doc, ['Field','Value'], engMeta, [42, PDF_CONTENT_W-42]);
     }
@@ -4215,12 +4462,12 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(eng.hull.readings.length > 1){
       pdfSubHeading(doc, 'Hull Integrity');
       pdfHullChart(doc, eng.hull.readings);
-      pdfParagraph(doc, 'Latest reading ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) +
+      pdfParagraph(doc, 'Latest reading ' + eng.hull.latest + '% at ' + fmtIsoDateTime(eng.hull.latestAt) +
         ' — ' + eng.hull.readings.length + ' readings taken.', {color:PDF_MUTED});
     } else if(eng.hull.latest != null){
       /* A single point can't be plotted, so it's stated instead of drawn. */
       pdfSubHeading(doc, 'Hull Integrity');
-      pdfParagraph(doc, 'Single reading: ' + eng.hull.latest + '% at ' + engFmtDateTime(eng.hull.latestAt) + '.');
+      pdfParagraph(doc, 'Single reading: ' + eng.hull.latest + '% at ' + fmtIsoDateTime(eng.hull.latestAt) + '.');
     }
 
     pdfSubHeading(doc, 'Actions');
@@ -4252,9 +4499,57 @@ function buildDirectPdf(s, navyLogoDataUrl, opts){
     if(engNotes.length){
       pdfSubHeading(doc, 'Engineer\'s Notes');
       engNotes.forEach(function(e){
-        pdfBlockNote(doc, engFmtTime(e.startedAt) + (engMulti ? ' — ' + (e.sourceLabel || '') : ''), e.note);
+        pdfBlockNote(doc, fmtIsoTime(e.startedAt) + (engMulti ? ' — ' + (e.sourceLabel || '') : ''), e.note);
       });
     }
+  }
+
+  if(s.navigationLog && s.navigationLog.waypoints){
+    var nav = s.navigationLog;
+    pdfSectionStart(doc, 'Navigation Log', tocEntries);
+
+    var navMeta = [];
+    var nm = nav.mission;
+    if(nm.navigator) navMeta.push(['NAVIGATOR', nm.navigator + (nm.rank ? ' (' + nm.rank + ')' : '')]);
+    if(nm.ship) navMeta.push(['SHIP', nm.ship]);
+    if(nm.name) navMeta.push(['MISSION', nm.name + (nm.type ? ' — ' + nm.type : '')]);
+    if(nm.date || nm.time) navMeta.push(['LOGGED', [nm.date, nm.time].filter(Boolean).join(' ')]);
+    var navActive = nav.waypoints.length - nav.completed;
+    navMeta.push(['WAYPOINTS', nav.waypoints.length + ' total — ' + nav.completed + ' complete, ' + navActive + ' active']);
+    pdfTable(doc, ['Field','Value'], navMeta, [42, PDF_CONTENT_W-42]);
+
+    if(nav.dropped){
+      /* Say so rather than quietly reporting fewer waypoints than the file contained. */
+      pdfParagraph(doc, nav.dropped + ' entr' + (nav.dropped===1?'y was':'ies were') +
+        ' skipped on import (unrecognised category, or missing number/title).', {italic:true, color:PDF_MUTED});
+    }
+
+    if(!nav.waypoints.length){
+      pdfParagraph(doc, 'No waypoints recorded.', {italic:true, color:PDF_MUTED});
+    }
+
+    /* One subsection per category, in the tool's own order, skipping categories with nothing in
+       them. Within a category waypoints run by number, numeric-aware so 2 precedes 10. */
+    NAV_CATEGORIES.forEach(function(cat){
+      var list = navByCategory(nav, cat);
+      if(!list.length) return;
+      pdfSubHeading(doc, NAV_CATEGORY_LABELS[cat]);
+      pdfTable(doc, ['No.','Title','Sector','Logged','Status'],
+        list.map(function(w){
+          return [w.number, w.title, w.sector || '—', fmtIsoTime(w.createdAt), navStatusText(w)];
+        }),
+        [14, 74, 26, 26, PDF_CONTENT_W-14-74-26-26]);
+
+      /* Description and outcome are the substance of a waypoint and would be truncated to
+         nothing in a table cell, so they get block notes. Outcome can be present on a waypoint
+         that is still active, which is legitimate and shown as-is. */
+      list.forEach(function(w){
+        if(!w.description && !w.outcome) return;
+        var body = w.description;
+        if(w.outcome) body = (body ? body + '\n' : '') + 'Outcome: ' + w.outcome;
+        pdfBlockNote(doc, w.number + ' · ' + w.title, body);
+      });
+    });
   }
 
   pdfSectionStart(doc, 'Mission Outcome', tocEntries);
