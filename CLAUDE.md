@@ -8,7 +8,8 @@ Fan-made and **not affiliated** with Bridge Command / The London Space Elevator 
 disclaimer wherever branding appears.
 
 Sibling fan tools export JSON that this app imports: the **Engineering Reference Tool**, the
-**Navigation & Radar** tool, and the Comms tool.
+**Navigation & Radar** tool, and the Comms tool. The Player Roster has its own shared format,
+documented in `docs/player-roster-format.md` — that file is the contract other tools write to.
 
 ## Layout
 
@@ -38,7 +39,9 @@ serving the old build otherwise. This is the easiest thing in the project to for
 
 - Mission data lives in **one** localStorage key, `ucnMissionCompanion_v1`.
 - Reusable data and UI preferences get their **own** keys so "New Mission" doesn't wipe them:
-  `ucnPlayerRoster_v1`, `ucnHeaderCollapsed_v1`, `ucnHasSeenIntro_v1`.
+  `ucnPlayerRoster_v1`, `ucnHeaderCollapsed_v1`, `ucnHasSeenIntro_v1`. The roster has its own
+  normalisation in `loadRoster()` rather than the mission-state migration chain, because it is a
+  separate key with a separate lifecycle.
 - `persist()` returns success and sets `saveFailed`. **Never swallow a storage error.** Because
   everything is in one key, exceeding quota loses the whole mission, and a silent failure looks
   exactly like working normally.
