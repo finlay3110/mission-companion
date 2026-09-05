@@ -169,9 +169,13 @@ Playwright and Chromium are available (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browser
 
 ## Traps already hit here
 
-- The embedded Exo 2 is **subsetted**. `↳` (U+21B3) and `▸` (U+25B8) have no glyph and jsPDF
-  drops them **silently**, leaving text looking untagged. `»`, `·`, `—`, `×`, `…` are present.
-  Check the font's character map before using a decorative glyph.
+- Both embedded fonts are **subsetted, and Orbitron's subset is narrower than Exo 2's**. In
+  Exo 2 `↳` (U+21B3) and `▸` (U+25B8) are missing while `»`, `·`, `—`, `×`, `…` are present.
+  In **Orbitron** `·` (U+00B7) and `»` (U+00BB) are *also* missing — `—`, `-`, `/`, `|`, `:`
+  are safe. Worse, a missing glyph in an Orbitron run **truncates the rest of the string**
+  rather than just dropping the character, so text silently disappears. Headings and badges use
+  `pdfHeadingFont()` (Orbitron); table cells and body use `pdfBodyFont()` (Exo 2). Check the
+  character map of the font you are actually drawing with before using any decorative glyph.
 - `Object.create(null)` rows break any later `obj.hasOwnProperty(k)` copy loop. Use
   `engShallowCopy()` or an equivalent prototype-safe copy.
 - Collapsing grouped rows into one loses per-row data and can hide an unfinished item behind a
