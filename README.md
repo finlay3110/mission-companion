@@ -104,6 +104,10 @@ The conventions, the reasoning behind the odd-looking decisions, and a list of t
 has already fallen into are in [`CLAUDE.md`](CLAUDE.md). Worth reading before changing anything —
 several of the constraints are load-bearing and look like tidying opportunities.
 
+Building a *new* UCN tool, or asking an LLM to? Paste
+[`docs/ucn-tool-style-guide.md`](docs/ucn-tool-style-guide.md) — the suite-wide house style,
+written to be read cold with no other context.
+
 The short version: one self-contained HTML file, plain ES5, no build step, no npm, and no runtime
 network requests of any kind. Bump `CACHE_VERSION` in `sw.js` whenever `index.html` changes, or
 installed copies keep serving the old build.
