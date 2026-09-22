@@ -966,8 +966,9 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <div class="header-body" id="headerBody">
     <div class="header-fields">
       <div class="field-mini">
-        <label for="opName">Operation Name</label>
-        <input type="text" id="opName" placeholder="e.g. Operation Silent Harbour">
+        <label for="opNameSelect">Operation Name</label>
+        <select id="opNameSelect"></select>
+        <input type="text" id="opName" placeholder="Enter operation name" style="margin-top:6px; display:none;">
       </div>
       <div class="field-mini">
         <label for="filedBySelect">Report Filed By</label>
@@ -1497,6 +1498,64 @@ var SHIP_ROLES = ['Captain','First Officer','Helm','Navigation','Comms','Power M
 
 var SHUTTLE_ROLES = ['Shuttle Helm','Shuttle Generalist','Shuttle Engineer'];
 
+/* Known Bridge Command operations and the mission type each one is. Selecting an operation in
+   the header sets the mission type for you, since the pairing is fixed — you can still override
+   the type afterwards, and "Other…" always allows a name that isn't on this list.
+
+   Grouped and ordered exactly as supplied rather than alphabetised, so the list stays diffable
+   against the source it came from. */
+var OPERATIONS_BY_TYPE = [
+  {type:'Military', names:[
+    'OPERATION TEDDER',
+    'ITHAKA MINING FACILITY',
+    'OPERATION ALCHEMIST',
+    'OPERATION CLAYMORE',
+    'OPERATION COPIAPO',
+    'OPERATION HANUMAN',
+    'OPERATION MENDICANT',
+    'OPERATION QUICKSTEP',
+    'OPERATION SILK ROAD',
+    'OPERATION TECUMSEH',
+    'OPERATION VIA MARIS'
+  ]},
+  {type:'Exploration', names:[
+    'OPERATION AMUNDSEN',
+    'OPERATION OBELISK',
+    'OPERATION SARGASSO',
+    'OPERATION ADAMAN',
+    'OPERATION MARCONI',
+    'OPERATION SISTEMA',
+    'OPERATION VANGUARD'
+  ]},
+  {type:'Diplomacy', names:[
+    'OPERATION REDENTOR',
+    'OPERATION BARATARIA',
+    'OPERATION CLARITY',
+    'OPERATION KISMET',
+    'OPERATION PHILBY',
+    'OPERATION PITCHFORK',
+    'TERRA NOVAN DIPLOMATIC INCIDENT'
+  ]},
+  {type:'Intrigue', names:[
+    'OPERATION ANTIMONY',
+    'OPERATION CAMINO',
+    'OPERATION EURYDICE',
+    'OPERATION MOCKINGBIRD',
+    'OPERATION TELEGRAM',
+    'OPERATION ARGUS',
+    'OPERATION RECOIL'
+  ]}
+];
+
+/* Flat name -> type lookup, built once. */
+var OPERATION_TYPES = (function(){
+  var map = {};
+  OPERATIONS_BY_TYPE.forEach(function(g){
+    g.names.forEach(function(n){ map[n] = g.type; });
+  });
+  return map;
+})();
+
 /* Classifies a log entry, shown as the badge on its card and carried into the PDF. The four
    named types line up with the quick-action buttons, so a quick entry tags itself. */
 var LOG_TYPES = ['General','Training','Combat','Nuclear Authorisation','Mission'];
@@ -1895,9 +1954,50 @@ function downscaleImage(file, maxDim, cb){
   reader.readAsDataURL(file);
 }
 
+/* Operation name is a picker over the known operations plus a free-text escape hatch. Top-level
+   rather than nested in initHeader() because renderAll() has to re-run it too — New Mission, a
+   JSON restore and a migration all replace state.opName, and the select is the control the user
+   actually sees. Writing state.opName straight into the (hidden) text input would silently leave
+   the picker showing the previous mission's operation. */
+function syncOperationControls(){
+  var opNameSelect = document.getElementById('opNameSelect');
+  var opNameInput = document.getElementById('opName');
+  var val = state.opName || '';
+  opNameSelect.innerHTML = operationOptionsHtml(val);
+  /* Anything not on the list — a hand-typed name, or an operation from an older build — is
+     "Other…" with the free-text box revealed and filled, so nothing a user typed disappears. */
+  var isOther = val !== '' && !OPERATION_TYPES.hasOwnProperty(val);
+  opNameInput.style.display = isOther ? '' : 'none';
+  opNameInput.value = isOther ? val : '';
+}
+
 function initHeader(){
-  opName.value = state.opName; opDate.value = state.opDate; opTime.value = state.opTime;
+  syncOperationControls();
+  opDate.value = state.opDate; opTime.value = state.opTime;
   syncFiledBySelect();
+
+  var opNameSelect = document.getElementById('opNameSelect');
+  opNameSelect.addEventListener('change', function(){
+    if(opNameSelect.value === 'other'){
+      state.opName = '';
+      opName.style.display = '';
+      opName.value = '';
+      opName.focus();
+    } else {
+      state.opName = opNameSelect.value;
+      opName.style.display = 'none';
+      opName.value = '';
+      /* The pairing between an operation and its type is fixed, so picking one fills the type in.
+         It is still an ordinary select afterwards — changing the type by hand is not fought. */
+      var t = OPERATION_TYPES[state.opName];
+      if(t){
+        state.missionType = t;
+        document.getElementById('missionType').value = t;
+        syncCampaignFieldsVisibility();
+      }
+    }
+    scheduleSave();
+  });
   opName.addEventListener('input', function(){ state.opName = opName.value; scheduleSave(); });
   opDate.addEventListener('input', function(){ state.opDate = opDate.value; scheduleSave(); });
   opTime.addEventListener('input', function(){ state.opTime = opTime.value; scheduleSave(); });
@@ -2340,6 +2440,24 @@ function wirePronounField(container, arrGetter, onSaveFn){
     item.pronouns = oth.value;
     save();
   });
+}
+
+/* Operations grouped by type, so the dropdown itself shows which type each one is. An operation
+   already in state that ISN'T on the list (an older mission, or one typed as free text) selects
+   "Other…" and drops into the text box — same shape as the Ship field. */
+function operationOptionsHtml(selected){
+  var val = selected || '';
+  var known = OPERATION_TYPES.hasOwnProperty(val);
+  var html = '<option value=""' + (val === '' ? ' selected' : '') + '>— Select —</option>';
+  OPERATIONS_BY_TYPE.forEach(function(g){
+    html += '<optgroup label="' + escAttr(g.type) + '">';
+    g.names.forEach(function(n){
+      html += '<option value="' + escAttr(n) + '"' + (n === val ? ' selected' : '') + '>' + escHtml(n) + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  html += '<option value="other"' + (val !== '' && !known ? ' selected' : '') + '>Other…</option>';
+  return html;
 }
 
 function rankOptionsHtml(selected){
@@ -3891,7 +4009,8 @@ function escAttr(s){
 
 /* ================= RENDER ALL ================= */
 function renderAll(){
-  opName.value = state.opName; opDate.value = state.opDate; opTime.value = state.opTime;
+  syncOperationControls();
+  opDate.value = state.opDate; opTime.value = state.opTime;
   syncFiledBySelect();
   (function(){
     var shipSelect = document.getElementById('shipSelect');
