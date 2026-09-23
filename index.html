@@ -357,6 +357,29 @@ main{
 .ac-item:active, .ac-item.hi{background:rgba(221,122,43,0.2);}
 .ac-empty{padding:11px 12px; font-size:12px; color:var(--muted); font-style:italic;}
 
+/* Searchable select (combobox). The <select> stays in the DOM as the value carrier, visually
+   clipped rather than removed: every existing change handler, data-field delegation and
+   renderAll() assignment keeps reading and writing it untouched. The input and popup are a
+   search affordance layered on top, not a second data path to keep in sync. */
+.combo{position:relative;}
+.combo-caret{
+  position:absolute; right:9px; top:50%; transform:translateY(-50%);
+  color:var(--muted); font-size:10px; pointer-events:none; line-height:1;
+}
+/* Higher specificity than the .field / .field-mini input rules, so the text clears the caret
+   without needing !important. */
+.field .combo-input, .field-mini .combo-input{padding-right:24px;}
+/* The clip technique rather than display:none — a display:none <select> is dropped from the
+   form and, in some browsers, stops reporting .value reliably. */
+.combo-select{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+.combo-list .ac-item{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
+/* Marks which option is currently stored, so opening the list to browse shows where you are. */
+.combo-list .ac-item.sel{border-left:3px solid var(--orange); padding-left:9px;}
+.combo-group{color:var(--muted); font-size:11px; flex:none;}
+
 /* Shuttle toggle */
 .toggle-row{
   display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border);
@@ -966,9 +989,14 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <div class="header-body" id="headerBody">
     <div class="header-fields">
       <div class="field-mini">
-        <label for="opNameSelect">Operation Name</label>
-        <select id="opNameSelect"></select>
-        <input type="text" id="opName" placeholder="Enter operation name" style="margin-top:6px; display:none;">
+        <label for="opNameInput">Operation Name</label>
+        <div class="combo" data-free="1">
+          <input type="text" class="combo-input" id="opNameInput" role="combobox" aria-autocomplete="list"
+                 aria-expanded="false" autocomplete="off" placeholder="Search operations…">
+          <span class="combo-caret" aria-hidden="true">▼</span>
+          <div class="ac-list combo-list" role="listbox"></div>
+          <select class="combo-select" id="opNameSelect" tabindex="-1" aria-hidden="true"></select>
+        </div>
       </div>
       <div class="field-mini">
         <label for="filedBySelect">Report Filed By</label>
@@ -1085,8 +1113,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
           </div>
           <div class="two-col">
             <div class="field">
-              <label for="fcRankBriefing">Rank</label>
-              <select id="fcRankBriefing"></select>
+              <label for="fcRankBriefingInput">Rank</label>
+              <div class="combo"><input type="text" class="combo-input" id="fcRankBriefingInput" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search rank…"><span class="combo-caret" aria-hidden="true">▼</span><div class="ac-list combo-list" role="listbox"></div><select class="combo-select" id="fcRankBriefing" tabindex="-1" aria-hidden="true"></select></div>
             </div>
             <div class="field">
               <label for="fcPronounsBriefing">Pronouns</label>
@@ -1105,8 +1133,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
           </div>
           <div class="two-col">
             <div class="field">
-              <label for="toRankBriefing">Rank</label>
-              <select id="toRankBriefing"></select>
+              <label for="toRankBriefingInput">Rank</label>
+              <div class="combo"><input type="text" class="combo-input" id="toRankBriefingInput" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search rank…"><span class="combo-caret" aria-hidden="true">▼</span><div class="ac-list combo-list" role="listbox"></div><select class="combo-select" id="toRankBriefing" tabindex="-1" aria-hidden="true"></select></div>
             </div>
             <div class="field">
               <label for="toPronounsBriefing">Pronouns</label>
@@ -1152,8 +1180,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       </div>
       <div class="two-col">
         <div class="field">
-          <label for="fcRank">Rank</label>
-          <select id="fcRank"></select>
+          <label for="fcRankInput">Rank</label>
+          <div class="combo"><input type="text" class="combo-input" id="fcRankInput" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search rank…"><span class="combo-caret" aria-hidden="true">▼</span><div class="ac-list combo-list" role="listbox"></div><select class="combo-select" id="fcRank" tabindex="-1" aria-hidden="true"></select></div>
         </div>
         <div class="field">
           <label for="fcPronouns">Pronouns</label>
@@ -1173,8 +1201,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       </div>
       <div class="two-col">
         <div class="field">
-          <label for="toRank">Rank</label>
-          <select id="toRank"></select>
+          <label for="toRankInput">Rank</label>
+          <div class="combo"><input type="text" class="combo-input" id="toRankInput" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search rank…"><span class="combo-caret" aria-hidden="true">▼</span><div class="ac-list combo-list" role="listbox"></div><select class="combo-select" id="toRank" tabindex="-1" aria-hidden="true"></select></div>
         </div>
         <div class="field">
           <label for="toPronouns">Pronouns</label>
@@ -1916,7 +1944,6 @@ document.addEventListener('click', function(e){
 });
 
 /* ================= HEADER ================= */
-var opName = document.getElementById('opName');
 var opDate = document.getElementById('opDate');
 var opTime = document.getElementById('opTime');
 
@@ -1954,21 +1981,14 @@ function downscaleImage(file, maxDim, cb){
   reader.readAsDataURL(file);
 }
 
-/* Operation name is a picker over the known operations plus a free-text escape hatch. Top-level
-   rather than nested in initHeader() because renderAll() has to re-run it too — New Mission, a
-   JSON restore and a migration all replace state.opName, and the select is the control the user
-   actually sees. Writing state.opName straight into the (hidden) text input would silently leave
-   the picker showing the previous mission's operation. */
+/* Rebuilds the operation list and the text shown for it. Top-level rather than nested in
+   initHeader() because renderAll() has to run it too — New Mission, a JSON restore and a
+   migration all replace state.opName, and without this the field would go on showing the
+   previous mission's operation. */
 function syncOperationControls(){
-  var opNameSelect = document.getElementById('opNameSelect');
-  var opNameInput = document.getElementById('opName');
-  var val = state.opName || '';
-  opNameSelect.innerHTML = operationOptionsHtml(val);
-  /* Anything not on the list — a hand-typed name, or an operation from an older build — is
-     "Other…" with the free-text box revealed and filled, so nothing a user typed disappears. */
-  var isOther = val !== '' && !OPERATION_TYPES.hasOwnProperty(val);
-  opNameInput.style.display = isOther ? '' : 'none';
-  opNameInput.value = isOther ? val : '';
+  var sel = document.getElementById('opNameSelect');
+  sel.innerHTML = operationOptionsHtml(state.opName || '');
+  comboSyncInput(sel);
 }
 
 function initHeader(){
@@ -1978,27 +1998,18 @@ function initHeader(){
 
   var opNameSelect = document.getElementById('opNameSelect');
   opNameSelect.addEventListener('change', function(){
-    if(opNameSelect.value === 'other'){
-      state.opName = '';
-      opName.style.display = '';
-      opName.value = '';
-      opName.focus();
-    } else {
-      state.opName = opNameSelect.value;
-      opName.style.display = 'none';
-      opName.value = '';
-      /* The pairing between an operation and its type is fixed, so picking one fills the type in.
-         It is still an ordinary select afterwards — changing the type by hand is not fought. */
-      var t = OPERATION_TYPES[state.opName];
-      if(t){
-        state.missionType = t;
-        document.getElementById('missionType').value = t;
-        syncCampaignFieldsVisibility();
-      }
+    state.opName = opNameSelect.value;
+    /* The pairing between an operation and its type is fixed, so picking a known one fills the
+       type in. It is still an ordinary select afterwards — changing the type by hand is not
+       fought, and a typed name that matches nothing leaves the type alone. */
+    var t = OPERATION_TYPES[state.opName];
+    if(t){
+      state.missionType = t;
+      document.getElementById('missionType').value = t;
+      syncCampaignFieldsVisibility();
     }
     scheduleSave();
   });
-  opName.addEventListener('input', function(){ state.opName = opName.value; scheduleSave(); });
   opDate.addEventListener('input', function(){ state.opDate = opDate.value; scheduleSave(); });
   opTime.addEventListener('input', function(){ state.opTime = opTime.value; scheduleSave(); });
 
@@ -2240,11 +2251,10 @@ function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronoun
   var pronounsSelectEl = document.getElementById(pronounsSelectId);
   var pronounsOtherEl = document.getElementById(pronounsOtherId);
 
-  RANKS.forEach(function(r){
-    var o=document.createElement('option'); o.value=r; o.textContent=r; rankEl.appendChild(o);
-  });
+  rankEl.innerHTML = rankOptionsHtml(state[stateKey].rank || '');
   searchEl.value = state[stateKey].character || '';
   rankEl.value = state[stateKey].rank || '';
+  comboSyncInput(rankEl);
   syncPronounControls(pronounsSelectEl, pronounsOtherEl, state[stateKey].pronouns || '');
 
   function mirrorSearch(val){
@@ -2255,7 +2265,7 @@ function initCastSearchField(searchId, listId, rankId, pronounsSelectId, pronoun
   function mirrorRank(val){
     if(!mirror || !mirror.rankId) return;
     var m = document.getElementById(mirror.rankId);
-    if(m) m.value = val;
+    if(m){ m.value = val; comboSyncInput(m); }
   }
   function mirrorPronouns(){
     if(!mirror || !mirror.pronounsSelectId || !mirror.pronounsOtherId) return;
@@ -2442,13 +2452,15 @@ function wirePronounField(container, arrGetter, onSaveFn){
   });
 }
 
-/* Operations grouped by type, so the dropdown itself shows which type each one is. An operation
-   already in state that ISN'T on the list (an older mission, or one typed as free text) selects
-   "Other…" and drops into the text box — same shape as the Ship field. */
+/* Operations grouped by type, so the list itself shows which type each one is — and because the
+   combo searches optgroup labels too, typing "intrigue" lists every intrigue operation.
+
+   An operation already in state that ISN'T on the list (an older mission, or one simply typed)
+   gets a trailing ad-hoc option carrying it, so the value survives a rebuild. There is no
+   "Other…" entry: the combo accepts free text directly, which is one less mode to explain. */
 function operationOptionsHtml(selected){
   var val = selected || '';
-  var known = OPERATION_TYPES.hasOwnProperty(val);
-  var html = '<option value=""' + (val === '' ? ' selected' : '') + '>— Select —</option>';
+  var html = '<option value=""' + (val === '' ? ' selected' : '') + '>— None —</option>';
   OPERATIONS_BY_TYPE.forEach(function(g){
     html += '<optgroup label="' + escAttr(g.type) + '">';
     g.names.forEach(function(n){
@@ -2456,14 +2468,296 @@ function operationOptionsHtml(selected){
     });
     html += '</optgroup>';
   });
-  html += '<option value="other"' + (val !== '' && !known ? ' selected' : '') + '>Other…</option>';
+  if(val !== '' && !OPERATION_TYPES.hasOwnProperty(val)){
+    html += '<option data-adhoc="1" value="' + escAttr(val) + '" selected>' + escHtml(val) + '</option>';
+  }
   return html;
+}
+
+/* ================= SEARCHABLE SELECT (COMBOBOX) =================
+   Ranks and operation names are long enough lists that scrolling a dropdown to find one is the
+   slow part of filling the form. Each is a <select> wrapped in a .combo: a text input you can
+   type into to filter, plus a caret that opens the whole list to browse.
+
+   The <select> is kept — clipped, not removed — and remains the single source of truth. A pick
+   sets select.value and fires a real 'change' event, so wireCrewList(), wireDynamicList() and
+   initCastSearchField() keep working with no knowledge that a combo exists.
+
+   Everything below is delegated from document. That is what lets crew and promotion cards go on
+   re-rendering themselves with innerHTML: a freshly written combo works immediately, with
+   nothing to re-initialise and no listeners leaking on the elements that were replaced. */
+
+function comboParts(el){
+  var wrap = el && el.closest ? el.closest('.combo') : null;
+  if(!wrap) return null;
+  var select = wrap.querySelector('.combo-select');
+  if(!select) return null;
+  return {
+    wrap: wrap,
+    input: wrap.querySelector('.combo-input'),
+    list: wrap.querySelector('.combo-list'),
+    select: select,
+    /* Free combos accept a value that is not on the list (an operation this build has never
+       heard of). Fixed ones snap back to the stored value instead. */
+    free: wrap.getAttribute('data-free') === '1'
+  };
+}
+
+/* Options are read off the <select> every time the list opens rather than cached, so a combo
+   whose options were rebuilt elsewhere — refreshCrewDropdowns(), a roster import — never shows
+   a stale list. */
+function comboOptions(select){
+  var out = [];
+  Array.prototype.forEach.call(select.options, function(o){
+    out.push({
+      value: o.value,
+      label: o.textContent,
+      group: (o.parentNode && o.parentNode.tagName === 'OPTGROUP') ? o.parentNode.label : ''
+    });
+  });
+  return out;
+}
+
+/* The text the input should show for whatever the select currently holds. Empty deliberately
+   returns '' rather than the placeholder option's label ("— None —", "—"): the input has a real
+   placeholder, and showing the option text instead would hide it and make an empty field look
+   filled in. Falls back to the raw value so a free-text operation still displays when no option
+   carries its label. */
+function comboLabelFor(select){
+  if(select.value === '') return '';
+  var i = select.selectedIndex;
+  if(i > -1 && select.options[i]) return select.options[i].textContent;
+  return select.value || '';
+}
+
+function comboSyncInput(select){
+  var p = comboParts(select);
+  if(p) p.input.value = comboLabelFor(select);
+}
+
+/* Re-reads every combo on the page from its <select>. renderAll() assigns straight to .value in
+   a dozen places, which fires no event, so this runs after it rather than making each of those
+   assignments go through a setter. */
+function syncAllCombos(){
+  document.querySelectorAll('.combo-select').forEach(function(sel){ comboSyncInput(sel); });
+}
+
+function comboClose(p){
+  p.list.classList.remove('show');
+  p.list.innerHTML = '';
+  p.input.setAttribute('aria-expanded','false');
+}
+
+function comboCloseAll(except){
+  document.querySelectorAll('.combo-list.show').forEach(function(l){
+    if(except && l === except.list) return;
+    var p = comboParts(l);
+    if(p) comboClose(p);
+  });
+}
+
+function comboRender(p, query){
+  var q = (query == null ? '' : String(query)).trim().toLowerCase();
+  var opts = comboOptions(p.select);
+  /* Matching the optgroup label too means typing "military" in the operation field lists every
+     military operation — the grouping is searchable, not just decoration. */
+  var matches = !q ? opts : opts.filter(function(o){
+    return o.label.toLowerCase().indexOf(q) !== -1 || o.group.toLowerCase().indexOf(q) !== -1;
+  });
+  if(!matches.length){
+    p.list.innerHTML = '<div class="ac-empty">' +
+      (p.free ? 'No match — this will be saved exactly as typed.' : 'No match.') + '</div>';
+  } else {
+    var cur = p.select.value;
+    p.list.innerHTML = matches.map(function(o){
+      return '<div class="ac-item' + (o.value === cur ? ' sel' : '') + '" role="option" ' +
+        'data-combo-value="' + escAttr(o.value) + '">' +
+        '<span>' + escHtml(o.label) + '</span>' +
+        (o.group ? '<span class="combo-group">' + escHtml(o.group) + '</span>' : '') +
+      '</div>';
+    }).join('');
+  }
+  p.list.classList.add('show');
+  p.input.setAttribute('aria-expanded','true');
+}
+
+function comboFireChange(select){
+  var ev;
+  /* document.createEvent is the ES5-era path; both are kept because the app targets whatever
+     browser the phone happens to have. */
+  if(typeof Event === 'function'){
+    ev = new Event('change', {bubbles:true});
+  } else {
+    ev = document.createEvent('Event');
+    ev.initEvent('change', true, false);
+  }
+  select.dispatchEvent(ev);
+}
+
+/* Stores a value the <select> has no option for, by adding one. Marked data-adhoc so the next
+   rebuild can drop it rather than accumulating one option per thing ever typed. */
+function comboSetAdhoc(select, value){
+  var old = select.querySelector('option[data-adhoc="1"]');
+  if(old) old.parentNode.removeChild(old);
+  if(value === '') return;
+  var o = document.createElement('option');
+  o.value = value; o.textContent = value; o.setAttribute('data-adhoc','1');
+  select.appendChild(o);
+}
+
+function comboCommit(p, value){
+  if(p.free && value !== '' && !comboHasOption(p.select, value)) comboSetAdhoc(p.select, value);
+  p.select.value = value;
+  p.input.value = comboLabelFor(p.select);
+  comboClose(p);
+  comboFireChange(p.select);
+}
+
+function comboHasOption(select, value){
+  for(var i=0;i<select.options.length;i++){ if(select.options[i].value === value) return true; }
+  return false;
+}
+
+/* Leaving the field without picking anything.
+
+   A fixed combo always reverts to the stored value, so the text can never disagree with what is
+   saved. A free combo has to guess what half-typed text meant, and the useful signal is whether
+   anything matched it: text that still matches options was a search the user walked away from
+   ("oper" on the way to OPERATION TEDDER), and reverting is right. Text that matches nothing was
+   a name being entered, and keeping it is right. Committing whatever was typed in both cases
+   silently saved search fragments as operation names. */
+function comboSettle(p){
+  var typed = p.input.value;
+  if(p.free && typed.trim() !== '' && !comboMatchCount(p, typed)){
+    comboCommit(p, typed);
+    return;
+  }
+  /* An exact match is a value, not a fragment — typing a name out in full and tapping away
+     should keep it rather than snapping back to whatever was there before. */
+  if(p.free){
+    var exact = comboExactValue(p, typed);
+    if(exact !== null && exact !== p.select.value){ comboCommit(p, exact); return; }
+  }
+  p.input.value = comboLabelFor(p.select);
+  comboClose(p);
+}
+
+function comboMatchCount(p, query){
+  var q = query.trim().toLowerCase();
+  if(!q) return 0;
+  return comboOptions(p.select).filter(function(o){
+    return o.label.toLowerCase().indexOf(q) !== -1 || o.group.toLowerCase().indexOf(q) !== -1;
+  }).length;
+}
+
+function comboExactValue(p, query){
+  var q = query.trim().toLowerCase();
+  var hit = null;
+  comboOptions(p.select).forEach(function(o){
+    if(o.label.trim().toLowerCase() === q) hit = o.value;
+  });
+  return hit;
+}
+
+function comboHighlight(p, delta){
+  var items = p.list.querySelectorAll('.ac-item');
+  if(!items.length) return;
+  var cur = -1;
+  for(var i=0;i<items.length;i++){ if(items[i].classList.contains('hi')) cur = i; }
+  var next = cur + delta;
+  if(next < 0) next = items.length - 1;
+  if(next >= items.length) next = 0;
+  if(cur > -1) items[cur].classList.remove('hi');
+  items[next].classList.add('hi');
+  items[next].scrollIntoView({block:'nearest'});
+}
+
+function initCombos(){
+  /* focusin rather than focus: focus does not bubble, and these handlers must reach combos that
+     did not exist when this ran. */
+  document.addEventListener('focusin', function(e){
+    var p = comboParts(e.target);
+    if(!p || !e.target.classList.contains('combo-input')) return;
+    comboCloseAll(p);
+    comboRender(p, '');
+  });
+
+  /* Tapping the field when it already has focus reopens the list — otherwise closing it by
+     picking, then wanting to change your mind, means leaving the field and coming back. */
+  document.addEventListener('click', function(e){
+    var input = e.target.closest ? e.target.closest('.combo-input') : null;
+    if(input){
+      var p = comboParts(input);
+      if(p && !p.list.classList.contains('show')){ comboCloseAll(p); comboRender(p, input.value); }
+      return;
+    }
+    var item = e.target.closest ? e.target.closest('.ac-item[data-combo-value]') : null;
+    if(item){
+      var pi = comboParts(item);
+      if(pi) comboCommit(pi, item.getAttribute('data-combo-value'));
+      return;
+    }
+    /* A click anywhere else settles every open combo. */
+    document.querySelectorAll('.combo-list.show').forEach(function(l){
+      var pl = comboParts(l);
+      if(pl) comboSettle(pl);
+    });
+  });
+
+  document.addEventListener('input', function(e){
+    if(!e.target.classList || !e.target.classList.contains('combo-input')) return;
+    var p = comboParts(e.target);
+    if(p) comboRender(p, e.target.value);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(!e.target.classList || !e.target.classList.contains('combo-input')) return;
+    var p = comboParts(e.target);
+    if(!p) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      if(!p.list.classList.contains('show')) comboRender(p, p.input.value);
+      else comboHighlight(p, e.key === 'ArrowDown' ? 1 : -1);
+      e.preventDefault();
+    } else if(e.key === 'Enter'){
+      var hi = p.list.querySelector('.ac-item.hi') || p.list.querySelector('.ac-item[data-combo-value]');
+      if(p.list.classList.contains('show') && hi) comboCommit(p, hi.getAttribute('data-combo-value'));
+      else comboSettle(p);
+      e.preventDefault();
+    } else if(e.key === 'Escape'){
+      /* Escape abandons the search in both kinds: the stored value wins. */
+      p.input.value = comboLabelFor(p.select);
+      comboClose(p);
+      e.preventDefault();
+    }
+  });
 }
 
 function rankOptionsHtml(selected){
   return '<option value="">—</option>' + RANKS.map(function(r){
     return '<option value="'+escAttr(r)+'"'+(r===selected?' selected':'')+'>'+escHtml(r)+'</option>';
   }).join('');
+}
+
+/* Wraps a <select> in the combo markup. selectAttrs is spliced onto the <select> itself, not the
+   wrapper, so data-field / data-id delegation and getElementById lookups all still land on the
+   element the rest of the app already talks to. */
+function comboHtml(selectAttrs, optionsHtml, displayValue, placeholder, free){
+  return '<div class="combo"' + (free ? ' data-free="1"' : '') + '>' +
+    '<input type="text" class="combo-input" role="combobox" aria-autocomplete="list" ' +
+      'aria-expanded="false" autocomplete="off" placeholder="' + escAttr(placeholder) + '" ' +
+      'value="' + escAttr(displayValue) + '">' +
+    '<span class="combo-caret" aria-hidden="true">▼</span>' +
+    '<div class="ac-list combo-list" role="listbox"></div>' +
+    '<select class="combo-select" tabindex="-1" aria-hidden="true" ' + selectAttrs + '>' +
+      optionsHtml +
+    '</select>' +
+  '</div>';
+}
+
+/* A rank field, searchable. Ranks are a fixed list, so this is not a free combo: anything typed
+   that matches nothing snaps back to what is stored rather than inventing a rank. */
+function rankFieldHtml(selectAttrs, selected){
+  return comboHtml(selectAttrs, rankOptionsHtml(selected), selected || '', 'Search rank…', false);
 }
 
 function crewNameFieldHtml(id, name){
@@ -2495,7 +2789,7 @@ function renderCrewList(containerId, emptyId, arr, allRoles, onChange){
       '' + crewNameFieldHtml(c.id, c.name) +
       '<div class="field"><label>Callsign</label><input type="text" data-field="callsign" data-id="'+c.id+'" value="'+escAttr(c.callsign)+'" placeholder="e.g. Viper"></div>' +
       '<div class="two-col">' +
-        '<div class="field"><label>Current Rank</label><select data-field="rank" data-id="'+c.id+'">'+rankOptionsHtml(c.rank)+'</select></div>' +
+        '<div class="field"><label>Current Rank</label>'+rankFieldHtml('data-field="rank" data-id="'+escAttr(c.id)+'"', c.rank)+'</div>' +
         '' + pronounFieldHtml(c.id, c.pronouns) +
       '</div>' +
       crewRoleMismatchHtml(c) +
@@ -3170,8 +3464,8 @@ function renderPromotions(){
         '<button type="button" class="del-x" data-action="del" data-id="'+p.id+'">✕</button></div>' +
       '<div class="field"><label>Crew Member</label><select data-field="crewMember" data-kind="promo" data-id="'+p.id+'">'+crewMemberOptions(p.crewMember)+'</select></div>' +
       '<div class="two-col">' +
-        '<div class="field"><label>Previous Rank</label><select data-field="previousRank" data-id="'+p.id+'">'+rankOptionsHtml(p.previousRank)+'</select></div>' +
-        '<div class="field"><label>New Rank</label><select data-field="newRank" data-id="'+p.id+'">'+rankOptionsHtml(p.newRank)+'</select></div>' +
+        '<div class="field"><label>Previous Rank</label>'+rankFieldHtml('data-field="previousRank" data-id="'+escAttr(p.id)+'"', p.previousRank)+'</div>' +
+        '<div class="field"><label>New Rank</label>'+rankFieldHtml('data-field="newRank" data-id="'+escAttr(p.id)+'"', p.newRank)+'</div>' +
       '</div>' +
       '<div class="field"><label>Reason (optional)</label><textarea data-field="reason" data-id="'+p.id+'" placeholder="What earned this promotion…">'+escHtml(p.reason||'')+'</textarea></div>' +
     '</div>';
@@ -4053,6 +4347,7 @@ function renderAll(){
   document.getElementById('shuttleToggle').checked = !!state.shuttleEnabled;
   document.getElementById('shuttleSection').style.display = state.shuttleEnabled ? 'block' : 'none';
   renderShuttleCrew();
+  syncAllCombos();
   document.getElementById('briefingText').value = state.briefing;
   document.getElementById('authorisationSelect').value = state.authorisation || '';
   document.getElementById('threatLevelSelect').value = state.threatLevel || '';
@@ -5356,6 +5651,7 @@ window.addEventListener('resize', syncHeaderHeight);
 installUiFonts();
 initServiceWorker();
 initSaveFlush();
+initCombos();
 initHeader();
 initTabs();
 initFlightCommander();
